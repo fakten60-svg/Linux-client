@@ -38,12 +38,11 @@ option(WOKE_ENABLE_LTO        "Enable link-time optimization for Release builds"
 # ---------------------------------------------------------------------------
 # Compiler flags
 # ---------------------------------------------------------------------------
+# Deliberately language-neutral: the vendored C dependencies inherit these, and
+# a C++-only option here emits one warning per C translation unit.
 add_compile_options(
     -fvisibility=hidden             # only JNI_OnLoad / JNI_OnUnload are exported
-    -fvisibility-inlines-hidden
     -fno-plt                        # cheaper cross-DSO calls; injection friendly
-    -Wall -Wextra
-    -Wno-unused-parameter           # JNI / hook signatures carry unused params
 )
 
 if(WOKE_ENABLE_SANITIZERS)
@@ -119,7 +118,14 @@ target_include_directories(woke PRIVATE
     ${FUNCHOOK_DIR}/include)
 
 target_compile_features(woke PRIVATE cxx_std_20)
-target_compile_options(woke PRIVATE -fno-rtti)
+
+# Warnings are our policy for OUR sources only — the vendored trees must not be
+# able to fail a build that gates on warning-free output.
+target_compile_options(woke PRIVATE
+    -fno-rtti                       # no typeid/vtype_info (drives the event bus design)
+    -fvisibility-inlines-hidden     # C++-only, so it cannot be a global option
+    -Wall -Wextra
+    -Wno-unused-parameter)          # JNI / hook signatures carry unused params
 
 target_link_libraries(woke PRIVATE
     imgui

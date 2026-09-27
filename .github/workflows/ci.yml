@@ -44,7 +44,11 @@ jobs:
               exit 1
             fi
             tail -n 3 "$log"
-            if grep -E "warning:" "$log"; then
+            # Vendored trees are not ours to keep warning-free; everything else
+            # is, so any other warning fails the build.
+            warnings=$(grep -E "warning:" "$log" | grep -v "/third_party/" || true)
+            if [ -n "$warnings" ]; then
+              echo "$warnings"
               echo "::error::$preset build emitted compiler warnings"
               exit 1
             fi
