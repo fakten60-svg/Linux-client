@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-verify:
+    name: build + live-JVM verification
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # GLFW's X11 backend needs the X11/GL development headers; the JDK is
+      # not required to build libwoke.so (JNI headers are vendored below).
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake xorg-dev libgl1-mesa-dev
+
+      - name: Bootstrap vendored dependencies
+        run: sh ./scripts/fetch_deps.sh
+
+      - name: Configure presets
+        run: |
+          cmake --preset linux-debug
+          cmake --preset linux-release
+
+      # "Builds successfully" means silently: a warning is a failure here, so a
+      # new one cannot slip into main unnoticed.
+      - name: Build (debug + release, zero warnings)
+        run: |
+          for preset in linux-debug linux-release; do
+            log="/tmp/${preset}-build.log"
+            if ! cmake --build --preset "$preset" -j"$(nproc)" >"$log" 2>&1; then
+              cat "$log"
+              exit 1
+            fi
+            tail -n 3 "$log"
+            if grep -E "warning:" "$log"; then
+              echo "::error::$preset build emitted compiler warnings"
+              exit 1
+            fi
+          done
+
+      - name: Check exported symbol surface
+        run: |
+          for preset in linux-debug linux-release; do
+            symbols=$(nm -D --defined-only "build/$preset/libwoke.so" \
+              | awk '{print $3}' | sort | tr '\n' ' ')
+            echo "$preset exports: $symbols"
+            if [ "$symbols" != "JNI_OnLoad JNI_OnUnLoad " ]; then
+              echo "::error::unexpected export surface in $preset"
+              exit 1
+            fi
+          done
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # The real proof: load libwoke.so into a live JVM, let the bootstrap post
+      # a task from a non-game thread, and require the worker to attach to the
+      # JVM, call a real JVM method, publish its event, and tear down cleanly.
+      - name: Live-JVM verification harness
+        run: |
+          python3 scripts/gen_stubs.py
+          javac -d tests/jvm/out tests/jvm/net/minecraft/*.java tests/jvm/WokeProbe.java
+          for preset in linux-debug linux-release; do
+            echo "=== $preset ==="
+            rm -rf logs
+            # A hung JVM teardown must fail the job rather than stall the runner.
+            timeout -s KILL 60 java -cp tests/jvm/out WokeProbe "build/$preset/libwoke.so"
+            echo "JVM exited cleanly"
+            grep -q "dispatch: demo task posted from bootstrap thread (non-game)" logs/latest.log
+            grep -q "worker thread online (jvm_attached=yes)" logs/latest.log
+            grep -q "worker thread JVM call result: java.vm.name=" logs/latest.log
+            grep -q "ClientStartedEvent received" logs/latest.log
+            grep -q "worker thread exiting (executed=1 dropped=0)" logs/latest.log
+          done
