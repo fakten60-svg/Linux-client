@@ -1,0 +1,41 @@
+# --- Build artifacts ---------------------------------------------------------
+/build/
+/bin/
+/.cache/
+*.so
+*.so.*
+*.o
+*.obj
+*.a
+*.lib
+*.dylib
+
+# CMake / tooling
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+CMakeUserPresets.json
+install_manifest.txt
+
+# --- Vendored dependencies (bootstrap via scripts/fetch_deps.sh) -------------
+/third_party/
+
+# --- Runtime logs ------------------------------------------------------------
+/logs/
+*.log
+
+# --- JVM verification harness -----------------------------------------------
+/tests/jvm/out/
+/tests/jvm/net/
+
+# --- Editor / IDE ------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- ImGui runtime state -----------------------------------------------------
+imgui.ini

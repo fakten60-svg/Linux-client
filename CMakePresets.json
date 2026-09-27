@@ -1,0 +1,64 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 27,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "BUILD_TESTING": "OFF"
+      }
+    },
+    {
+      "name": "linux-debug",
+      "inherits": "linux-base",
+      "displayName": "woke.wtf — Linux Debug",
+      "description": "Unoptimized build with full debug info for development",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "WOKE_ENABLE_LTO": "OFF"
+      }
+    },
+    {
+      "name": "linux-release",
+      "inherits": "linux-base",
+      "displayName": "woke.wtf — Linux Release",
+      "description": "Optimized -O3 build with LTO for injection use",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "WOKE_ENABLE_LTO": "ON"
+      }
+    },
+    {
+      "name": "linux-release-asan",
+      "inherits": "linux-base",
+      "displayName": "woke.wtf — Linux Release + ASan/UBSan",
+      "description": "Optimized build with sanitizers; development sessions only",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "WOKE_ENABLE_SANITIZERS": "ON",
+        "WOKE_ENABLE_LTO": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "linux-debug",
+      "configurePreset": "linux-debug"
+    },
+    {
+      "name": "linux-release",
+      "configurePreset": "linux-release"
+    },
+    {
+      "name": "linux-release-asan",
+      "configurePreset": "linux-release-asan"
+    }
+  ]
+}

@@ -1,0 +1,201 @@
+{
+  "meta": {
+    "target": "1.21.11",
+    "yarn_build": "yarn 1.21.11+build.6",
+    "namespaces": {
+      "official": "official",
+      "intermediary": "intermediary",
+      "named": "named"
+    },
+    "note": "Descriptors/signatures are in intermediary namespace; keys are stable symbolic names."
+  },
+  "classes": {
+    "minecraft_client": {
+      "intermediary": "net/minecraft/class_310",
+      "named": "net/minecraft/client/MinecraftClient",
+      "fields": {
+        "player": {
+          "intermediary": "field_1724",
+          "named": "player",
+          "sig": "Lnet/minecraft/class_746;",
+          "descriptor": "Lnet/minecraft/class_746;"
+        },
+        "world": {
+          "intermediary": "field_1687",
+          "named": "world",
+          "sig": "Lnet/minecraft/class_638;",
+          "descriptor": "Lnet/minecraft/class_638;"
+        },
+        "interactionManager": {
+          "intermediary": "field_1761",
+          "named": "interactionManager",
+          "sig": "Lnet/minecraft/class_636;",
+          "descriptor": "Lnet/minecraft/class_636;"
+        },
+        "options": {
+          "intermediary": "field_1690",
+          "named": "options",
+          "sig": "Lnet/minecraft/class_315;",
+          "descriptor": "Lnet/minecraft/class_315;"
+        }
+      },
+      "methods": {
+        "getInstance": {
+          "intermediary": "method_1551",
+          "named": "getInstance",
+          "sig": "()Lnet/minecraft/class_310;",
+          "signature": "()Lnet/minecraft/class_310;"
+        },
+        "getSession": {
+          "intermediary": "method_1548",
+          "named": "getSession",
+          "sig": "()Lnet/minecraft/class_320;",
+          "signature": "()Lnet/minecraft/class_320;"
+        },
+        "getCameraEntity": {
+          "intermediary": "method_1560",
+          "named": "getCameraEntity",
+          "sig": "()Lnet/minecraft/class_1297;",
+          "signature": "()Lnet/minecraft/class_1297;"
+        }
+      }
+    },
+    "client_player_entity": {
+      "intermediary": "net/minecraft/class_746",
+      "named": "net/minecraft/client/network/ClientPlayerEntity",
+      "fields": {},
+      "methods": {}
+    },
+    "client_world": {
+      "intermediary": "net/minecraft/class_638",
+      "named": "net/minecraft/client/world/ClientWorld",
+      "fields": {},
+      "methods": {}
+    },
+    "interaction_manager": {
+      "intermediary": "net/minecraft/class_636",
+      "named": "net/minecraft/client/network/ClientPlayerInteractionManager",
+      "fields": {},
+      "methods": {}
+    },
+    "game_options": {
+      "intermediary": "net/minecraft/class_315",
+      "named": "net/minecraft/client/option/GameOptions",
+      "fields": {},
+      "methods": {}
+    },
+    "entity": {
+      "intermediary": "net/minecraft/class_1297",
+      "named": "net/minecraft/entity/Entity",
+      "fields": {},
+      "methods": {
+        "isOnGround": {
+          "intermediary": "method_24828",
+          "named": "isOnGround",
+          "sig": "()Z",
+          "signature": "()Z"
+        },
+        "getX": {
+          "intermediary": "method_23317",
+          "named": "getX",
+          "sig": "()D",
+          "signature": "()D"
+        },
+        "getY": {
+          "intermediary": "method_23318",
+          "named": "getY",
+          "sig": "()D",
+          "signature": "()D"
+        },
+        "getZ": {
+          "intermediary": "method_23321",
+          "named": "getZ",
+          "sig": "()D",
+          "signature": "()D"
+        }
+      }
+    },
+    "living_entity": {
+      "intermediary": "net/minecraft/class_1309",
+      "named": "net/minecraft/entity/LivingEntity",
+      "fields": {},
+      "methods": {
+        "getHealth": {
+          "intermediary": "method_6032",
+          "named": "getHealth",
+          "sig": "()F",
+          "signature": "()F"
+        },
+        "getMaxHealth": {
+          "intermediary": "method_6063",
+          "named": "getMaxHealth",
+          "sig": "()F",
+          "signature": "()F"
+        }
+      }
+    },
+    "item_stack": {
+      "intermediary": "net/minecraft/class_1799",
+      "named": "net/minecraft/item/ItemStack",
+      "fields": {},
+      "methods": {
+        "getCount": {
+          "intermediary": "method_7947",
+          "named": "getCount",
+          "sig": "()I",
+          "signature": "()I"
+        },
+        "isEmpty": {
+          "intermediary": "method_7960",
+          "named": "isEmpty",
+          "sig": "()Z",
+          "signature": "()Z"
+        },
+        "getItem": {
+          "intermediary": "method_7909",
+          "named": "getItem",
+          "sig": "()Lnet/minecraft/class_1792;",
+          "signature": "()Lnet/minecraft/class_1792;"
+        }
+      }
+    },
+    "player_inventory": {
+      "intermediary": "net/minecraft/class_1661",
+      "named": "net/minecraft/entity/player/PlayerInventory",
+      "fields": {},
+      "methods": {
+        "getSelectedSlot": {
+          "intermediary": "method_67532",
+          "named": "getSelectedSlot",
+          "sig": "()I",
+          "signature": "()I"
+        }
+      }
+    },
+    "hit_result": {
+      "intermediary": "net/minecraft/class_239",
+      "named": "net/minecraft/util/hit/HitResult",
+      "fields": {},
+      "methods": {}
+    },
+    "entity_hit_result": {
+      "intermediary": "net/minecraft/class_3966",
+      "named": "net/minecraft/util/hit/EntityHitResult",
+      "fields": {},
+      "methods": {}
+    },
+    "session": {
+      "intermediary": "net/minecraft/class_320",
+      "named": "net/minecraft/client/session/Session",
+      "fields": {},
+      "methods": {
+        "getUsername": {
+          "intermediary": "method_1676",
+          "named": "getUsername",
+          "sig": "()Ljava/lang/String;",
+          "signature": "()Ljava/lang/String;"
+        }
+      }
+    }
+  }
+}
