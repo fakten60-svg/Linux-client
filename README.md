@@ -89,14 +89,37 @@ Additional CMake switches: `-DWOKE_ENABLE_SANITIZERS=ON`, `-DWOKE_ENABLE_LTO=ON|
 │   ├── core/logger.*         # ANSI console + session/latest.log engine
 │   ├── core/event_bus.h      # type-safe publish/subscribe (no RTTI, no std::function)
 │   ├── core/thread_dispatch.*# game-thread task queue (the mc.execute() analogue)
-│   ├── jvm/mappings.*        # mappings.json loader (auto schema detection)
-│   ├── jvm/base_jni_hook.*   # guarded JNI reflection (ScopedAttach RAII)
-│   ├── jvm/reflection_cache.*# one-line cached jclass/jmethodID/jfieldID lookups
-│   ├── jvm/game_context.*    # cached class_310 / player / world handles
-│   ├── hooks/hook_manager.*  # MinHook-style API over funchook (Linux)
+│   ├── utils/math_utils.h    # pure easing/lerp/spring primitives (header-only)
+│   ├── utils/render_utils.*  # stateless DrawList helpers (shadow, gradient, clip)
+│   ├── ui/theme.h            # macOS palette/radii/timing as constexpr tokens
+│   ├── ui/animation.*        # named float channels: tween + exponential damp
+│   ├── ui/components.*       # PillToggle, ModuleCard, CategoryItem, SearchBar
+│   ├── ui/clickgui.*         # macOS chrome: traffic lights, sidebar, cards
+│   ├── ui/notifications.*    # toast queue (FixedString, zero-alloc draw)
+│   ├── jvm/... hooks/...     # JVM reflection + funchook layers (Phases 3–4)
 │   └── woke.ld               # version script: only JNI_OnLoad/OnUnLoad export
+├── tools/woketool/           # standalone GLFW+GL3 app rendering the ui/ stack
+│   └── main.cpp              #   --screenshot <png> / --once verification flags
 ├── tests/jvm/                # live-JVM verification harness (stubs + probe)
 └── logs/                     # runtime session logs (gitignored)
+
+### macOS UI harness (woketool)
+
+The Phase 5 UI stack is developed and verified as a **standalone desktop app**
+(`woketool`) instead of an injected overlay: same theme tokens, animation
+controller, components and chrome, rendered by GLFW + OpenGL 3.2 + Dear ImGui
+in a normal window. Verification:
+
+```sh
+cmake --build --preset linux-release
+timeout 60 xvfb-run -a ./build/linux-release/woketool --screenshot ui.png --frames 45
+```
+
+The build gates on zero warnings; the pixel checks assert the exact spec
+palette (traffic lights #FF5F56/#FFBD2E/#27C93F, backdrop #0B0E14, sidebar
+#10141C, cards #1C222D). Every design value carries a one-sentence rationale
+inline (spec line or macOS platform behavior). Demo cards are neutral
+interface-settings mock data — no gameplay modules.
 ```
 
 ## Engineering Standards
@@ -116,7 +139,9 @@ Additional CMake switches: `-DWOKE_ENABLE_SANITIZERS=ON`, `-DWOKE_ENABLE_LTO=ON|
       game context; funchook-based hook engine with runtime self-test
 - [x] Phase 4 — event bus + game-thread dispatch (bounded queue, dedicated
       worker that attaches to the JVM per drain batch, module finaliser joins it)
-- [ ] Phase 5 — graphics hooks + ImGui overlay, macOS ClickGUI, modules
+- [ ] Phase 5 — macOS UI stack: theme/animation/components/chrome/toasts
+      implemented and verified via the standalone `woketool` harness
+      (injection-side graphics hooks intentionally not pursued)
 
 ### Mappings
 

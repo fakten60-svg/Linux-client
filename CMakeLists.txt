@@ -16,6 +16,8 @@ project(woke
     DESCRIPTION "woke.wtf — native injection utility client (private testing scope)"
     LANGUAGES C CXX)
 
+find_package(OpenGL REQUIRED)   # woketool (standalone UI harness) links GL
+
 # ---------------------------------------------------------------------------
 # Global toolchain policy
 # ---------------------------------------------------------------------------
@@ -89,6 +91,13 @@ set(GLFW_INSTALL        OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_WAYLAND  OFF CACHE BOOL "" FORCE)
 add_subdirectory(${GLFW_DIR} glfw EXCLUDE_FROM_ALL)
 
+# --- ImGui platform backends for the standalone tool (not linked into the
+# --- injection artifact; libwoke never renders itself) ----------------------
+add_library(imgui_tool_backends STATIC
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
+target_link_libraries(imgui_tool_backends PUBLIC imgui glfw)
+
 # --- funchook (Linux function-hooking engine; MinHook-style shim planned) ---
 set(FUNCHOOK_BUILD_SHARED  OFF CACHE BOOL "" FORCE)
 set(FUNCHOOK_BUILD_TESTING OFF CACHE BOOL "" FORCE)
@@ -142,6 +151,44 @@ target_link_libraries(woke PRIVATE
 target_link_options(woke PRIVATE
     -Wl,--no-undefined
     -Wl,--version-script=${WOKE_ROOT}/src/woke.ld)
+
+# ---------------------------------------------------------------------------
+# woketool — standalone macOS-UI demo/verification app (no injection)
+# ---------------------------------------------------------------------------
+# Renders the same ui/ stack (theme, animation, components, clickgui,
+# notifications) inside a normal GLFW desktop window. Serves as the visual
+# test harness for Phase 5: --screenshot writes a PNG for review.
+add_executable(woketool
+    tools/woketool/main.cpp
+    src/ui/animation.cpp
+    src/ui/components.cpp
+    src/ui/clickgui.cpp
+    src/ui/notifications.cpp
+    src/utils/render_utils.cpp
+    src/core/logger.cpp)
+
+target_include_directories(woketool PRIVATE
+    ${WOKE_ROOT}/src
+    ${WOKE_ROOT}/tools/woketool)
+
+target_compile_features(woketool PRIVATE cxx_std_20)
+
+target_compile_options(woketool PRIVATE
+    -fno-rtti
+    -fvisibility-inlines-hidden
+    -Wall -Wextra -Wpedantic
+    -Wno-unused-parameter)
+
+target_link_libraries(woketool PRIVATE
+    imgui
+    imgui_tool_backends
+    glfw
+    OpenGL::GL
+    ${CMAKE_DL_LIBS})
+
+if(WOKE_ENABLE_LTO AND NOT WOKE_ENABLE_SANITIZERS)
+    set_target_properties(woketool PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
 
 # LTO for release (skipped under sanitizers, where it is counterproductive)
 if(WOKE_ENABLE_LTO AND NOT WOKE_ENABLE_SANITIZERS)
