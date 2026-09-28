@@ -85,6 +85,11 @@ public:
     /// Entries held in memory (applied + unknown) — what a save will write.
     int config_entries() const { return config_.count(); }
 
+    /// Cards the GUI holds, before the category and search filters. The
+    /// harness compares it against Diagnostics::visible_cards to prove a
+    /// filter narrowed the list rather than the list simply being short.
+    int card_total() const { return card_count_; }
+
     /// Apply one `key = value` edit from outside the UI (woketool's --set, and
     /// the same path the file loader uses). Marks the settings dirty so the
     /// change is written back. Returns false for an unrecognised key.
@@ -102,6 +107,13 @@ public:
         /// Effective duration of the window appear/close tween under that
         /// factor — the value the pixel-level A/B of animation timing reads.
         float window_appear_s = 0.0f;
+        /// How open the window is right now (1.0 = settled). The appear tween
+        /// multiplies the ambient alpha, so a frame captured mid-flight is a
+        /// blend of every surface rather than the palette; a headless harness
+        /// has to wait for this to reach 1.0 before asserting on pixels, and
+        /// it cannot rely on the frame count, because a short (filtered) list
+        /// renders fast enough to finish 60 frames before a 220 ms tween ends.
+        float window_open     = 0.0f;
         /// Switches currently on, across the whole (unfiltered) card list.
         int   enabled_cards = 0;
     };

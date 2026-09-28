@@ -65,7 +65,7 @@ export PATH="$HOME/.local/bin:$PATH"
 ```sh
 ctest --test-dir build/linux-release --output-on-failure
 # → 1/1 Test #1: woke.unit ... Passed
-# → OK — 900+ checks, 0 failures
+# → OK — 880 checks, 0 failures
 ```
 
 `woke_unit_tests` (`tests/unit/`) covers the pure, headless layers: `utils/math_utils.h`,
@@ -88,6 +88,23 @@ job. `-DWOKE_BUILD_TESTS=OFF` drops the target and the ctest entry.
 
 Additional CMake switches: `-DWOKE_ENABLE_SANITIZERS=ON`, `-DWOKE_ENABLE_LTO=ON|OFF`,
 `-DWOKE_BUILD_TESTS=ON|OFF`.
+
+### Continuous integration
+
+Every push to `main` and every pull request runs two jobs
+(`.github/workflows/ci.yml`):
+
+| Job | What it proves |
+|---|---|
+| `build-and-verify` | debug + release build with **zero warnings**, the unit suite in both presets, an exported symbol surface of exactly `JNI_OnLoad JNI_OnUnLoad`, the `woketool` checks below under Xvfb (baseline, reduced motion, a search filter, and a settings file surviving a restart), and the live-JVM harness |
+| `sanitizers` | the same unit suite under ASan + UBSan with leak detection on, plus the UI harness under the same sanitizers |
+
+The live-JVM step loads `libwoke.so` into a real JVM, lets the bootstrap post a
+task from a non-game thread, and requires the worker to attach, call a real JVM
+method, publish its event and tear down cleanly — under a `timeout`, so a hung
+JVM fails the job instead of stalling the runner. The baseline screenshot is
+uploaded as a build artifact, so a palette regression can be looked at rather
+than only read about.
 
 ## Project Layout
 
@@ -120,7 +137,7 @@ Additional CMake switches: `-DWOKE_ENABLE_SANITIZERS=ON`, `-DWOKE_ENABLE_LTO=ON|
 │   ├── jvm/... hooks/...     # JVM reflection + funchook layers (Phases 3–4)
 │   └── woke.ld               # version script: only JNI_OnLoad/OnUnLoad export
 ├── tools/woketool/           # standalone GLFW+GL3 app rendering the ui/ stack
-│   └── main.cpp              #   --screenshot/--frames/--search/--config/--set flags
+│   └── main.cpp              #   --screenshot/--verify/--search/--config/--set flags
 ├── tests/unit/               # dependency-free unit suite (ctest, no display needed)
 │   ├── test_util.h           #   ~70-line assertion context — the whole harness
 │   └── test_{text,math,animation,settings}.cpp
@@ -160,6 +177,36 @@ extent and the active animation scale are verifiable without a mouse:
 The pointer rests at the screen centre under a bare Xvfb display, which hovers
 whichever card sits there and quietly pollutes any screenshot-to-screenshot
 diff; `--park-mouse` keeps it off the UI for that reason.
+
+`--verify` turns that same capture into an assertion instead of a picture, and
+exits non-zero if any check fails — which is what lets CI gate on a rendered
+frame rather than on a human looking at a PNG:
+
+```sh
+xvfb-run -a ./build/linux-release/woketool --screenshot ui.png --frames 60 \
+    --park-mouse --verify
+# [woketool] check=ok   window_bg       count=215201 min=100000
+# [woketool] check=ok   light_red       count=91 min=20
+# [woketool] check=ok   all_cards_shown visible=16 total=16
+# [woketool] check=ok   motion_scale    motion_scale=1.000 expected=1.000
+# [woketool] verify checks=14 failed=0
+```
+
+It counts how many pixels of the frame carry each theme surface and compares
+against the `theme.h` tokens, so a deliberate repaint keeps passing and only a
+*missing* surface fails; it checks that a filtered list is genuinely shorter
+while an unfiltered one is complete, that the card pane really overflows, and
+that the motion scale actually applied to the timing is the one the Reduced
+Motion switch asks for. Flat fills are matched exactly; type is matched with a
+±6 per-channel allowance, because antialiased glyphs are almost never exactly
+their own colour.
+
+Because the appear tween scales the ambient alpha, `--verify` waits for the
+window to report itself fully open before capturing — a mid-flight frame is a
+blend of every surface rather than the palette. That has to come from the
+tween's own state and not from a frame count: on a fast machine a filtered list
+can finish 60 frames before the 220 ms tween ends. An intentional mid-flight
+`--screenshot` (the `--closed-frames` A/B above) is unaffected.
 
 #### Settings persistence
 
@@ -230,10 +277,12 @@ the switch on, and is still only a third of the way there with it off;
 `--click-motion-at <frame>` synthesizes a click on the switch itself, so the
 real click -> state -> animation-scale path is exercised without a user.
 
-The build gates on zero warnings; the pixel checks assert the exact spec
-palette (traffic lights #FF5F56/#FFBD2E/#27C93F, backdrop #0B0E14, sidebar
-#10141C, cards #1C222D). Every design value carries a one-sentence rationale
-inline (spec line or macOS platform behavior). Demo cards are neutral
+The build gates on zero warnings, and `--verify` asserts on the frame the
+harness actually rendered: every spec surface must be on screen (traffic lights
+#FF5F56/#FFBD2E/#27C93F, backdrop #0B0E14, sidebar #10141C, cards #1C222D), the
+filters must narrow the list, and the accessibility switch must rescale the
+timing it claims to. Every design value carries a one-sentence rationale inline
+(spec line or macOS platform behavior). Demo cards are neutral
 interface-settings mock data — no gameplay modules.
 
 ## Engineering Standards
@@ -262,8 +311,9 @@ interface-settings mock data — no gameplay modules.
       (injection-side graphics hooks intentionally not pursued)
 - [x] Testing — dependency-free unit suite over the pure layers (text helpers,
       animation math, settings store, animation controller), run by `ctest` in
-      both presets on every CI build; GL-level behaviour stays covered by the
-      `woketool` screenshot harness
+      both presets and again under ASan + UBSan on every CI build; GL-level
+      behaviour is gated by the `woketool` harness, whose `--verify` mode asserts
+      the rendered palette, the filters and the accessibility scale under Xvfb
 
 ### Mappings
 

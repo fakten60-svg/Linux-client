@@ -35,11 +35,22 @@
 //                         hovers whichever card sits there — harmless for a
 //                         palette check, but it silently pollutes any diff
 //                         between two screenshots.
+//    --verify             assert on the frame that was just rendered and exit
+//                         non-zero if a check fails: every flat theme surface
+//                         must actually be on screen, the filters must really
+//                         narrow the list, and the Reduced Motion switch must
+//                         scale the timing it promises to. This is what turns
+//                         "a human looked at the PNG" into something CI can
+//                         gate on. Implies a capture, with or without
+//                         --screenshot, and waits for the window to report
+//                         itself fully open first, so the checks always see the
+//                         settled palette however fast the machine renders.
 // ============================================================================
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 #include <GLFW/glfw3.h>
 
@@ -57,29 +68,180 @@
 // ---------------------------------------------------------------- screenshot
 namespace {
 
-bool write_screenshot_png(const char *path, int w, int h) {
-    const size_t row = static_cast<size_t>(w) * 3;
+/// One grabbed frame, top-down RGB8, held in memory so the PNG a human reviews
+/// and the checks the tool asserts on are reading the *same* pixels. A check
+/// that re-read the framebuffer could disagree with the saved image.
+struct Frame {
+    int                        w = 0;
+    int                        h = 0;
+    std::vector<unsigned char> rgb;
+};
+
+bool grab_frame(int w, int h, Frame &out) {
+    if (w <= 0 || h <= 0) return false;
+
+    const size_t row   = static_cast<size_t>(w) * 3;
     const size_t total = row * static_cast<size_t>(h);
 
-    unsigned char *pix = new (std::nothrow) unsigned char[total];
-    unsigned char *flip = new (std::nothrow) unsigned char[total];
-    if (pix == nullptr || flip == nullptr) {
-        delete[] pix;
-        delete[] flip;
-        return false;
-    }
+    out = Frame{};
+    out.w = w;
+    out.h = h;
+    out.rgb.resize(total);
 
+    std::vector<unsigned char> bottom_up(total);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, pix);
+    glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, bottom_up.data());
+
+    // GL hands back bottom-up rows; everything downstream wants top-down.
     for (int y = 0; y < h; ++y) {
-        std::memcpy(flip + static_cast<size_t>(y) * row,
-                    pix + static_cast<size_t>(h - 1 - y) * row, row);
+        std::memcpy(out.rgb.data() + static_cast<size_t>(y) * row,
+                    bottom_up.data() + static_cast<size_t>(h - 1 - y) * row,
+                    row);
+    }
+    return true;
+}
+
+// ------------------------------------------------------- rendered-frame checks
+//
+// The assertions below are deliberately geometric rather than coordinate-exact.
+// Counting how many pixels carry a theme color is robust to the layout moving
+// (a wider sidebar, one card fewer) while still failing the moment a surface
+// stops being drawn — sampling one hardcoded pixel would do the opposite on
+// both counts. Antialiasing only touches a surface's edge, so the interior of
+// every flat fill matches its token exactly.
+//
+// Colors are compared against the theme tokens, not against literal hex: the
+// tokens are the single source of truth, so a deliberate repaint keeps passing
+// and only a *missing* surface fails. The spec values themselves are pinned by
+// theme.h and reviewed there.
+
+/// A theme surface plus the pixel count below which it counts as absent.
+/// Floors sit well under the measured counts (see the printed `count=` on each
+/// line) so ordinary layout churn cannot flake the check.
+///
+/// `per_card` exists because type scales with how much is on screen: a title
+/// covers a handful of pixels, so a fixed floor would either be useless for one
+/// card or force every filtered run to fail. The requirement is therefore
+/// `base + per_card * visible_cards`.
+///
+/// `tolerance` exists because flat fills are exact to the byte while
+/// antialiased type is almost never exactly its own color — every glyph edge is
+/// a blend — so text is matched with a small allowance instead.
+struct Surface {
+    const char *name;
+    ImU32       color;
+    size_t      base_pixels;
+    size_t      per_card;
+    int         tolerance;
+};
+
+size_t count_color(const Frame &f, ImU32 packed, int tolerance) {
+    // Theme colors are packed 0xAABBGGRR (IM_COL32); the framebuffer is RGB8.
+    const int r = static_cast<int>(packed & 0xFFu);
+    const int g = static_cast<int>((packed >> 8) & 0xFFu);
+    const int b = static_cast<int>((packed >> 16) & 0xFFu);
+
+    const auto near = [tolerance](unsigned char got, int want) {
+        const int delta = static_cast<int>(got) - want;
+        return delta <= tolerance && delta >= -tolerance;
+    };
+
+    size_t n = 0;
+    for (size_t i = 0; i + 2 < f.rgb.size(); i += 3) {
+        if (near(f.rgb[i], r) && near(f.rgb[i + 1], g) && near(f.rgb[i + 2], b))
+            ++n;
+    }
+    return n;
+}
+
+struct Verify {
+    int checks = 0;
+    int failed = 0;
+
+    void check(bool ok, const char *name, const char *detail) {
+        ++checks;
+        if (!ok) ++failed;
+        std::printf("[woketool] check=%s %-15s %s\n", ok ? "ok  " : "FAIL",
+                    name, detail);
+    }
+};
+
+/// Returns the number of failed checks, which is also the process exit code.
+int verify_frame(const Frame &f, const woke::ui::ClickGui::Diagnostics &d,
+                 bool reduced_motion, int card_total, bool filtered) {
+    Verify v;
+
+    const int kText = 6; // antialiasing allowance, per channel
+    const Surface surfaces[] = {
+        {"window_bg",      woke::theme::color::window_bg,      100000, 0,    0},
+        {"sidebar_bg",     woke::theme::color::sidebar_bg,      20000, 0,    0},
+        {"card_bg",        woke::theme::color::card_bg,         10000, 0,    0},
+        {"light_red",      woke::theme::color::light_red,          20, 0,    0},
+        {"light_yellow",   woke::theme::color::light_yellow,       20, 0,    0},
+        {"light_green",    woke::theme::color::light_green,        20, 0,    0},
+        {"pill_off",       woke::theme::color::pill_off,          200, 0,    0},
+        {"apple_blue",     woke::theme::color::apple_blue,         30, 0,    0},
+        // Type has far fewer exact pixels than a flat fill — a glyph stem is
+        // one or two pixels wide — so these floors are small on purpose: a
+        // count this size cannot come from anything but the text itself.
+        {"text_bright",    woke::theme::color::text_bright,          0, 3, kText},
+        {"title_bar_text", woke::theme::color::title_bar_text,     100, 8, kText},
+    };
+
+    for (const Surface &s : surfaces) {
+        const size_t n = count_color(f, s.color, s.tolerance);
+        const size_t min_pixels =
+            s.base_pixels + s.per_card * static_cast<size_t>(d.visible_cards);
+        char detail[96];
+        std::snprintf(detail, sizeof(detail), "count=%zu min=%zu", n, min_pixels);
+        v.check(n >= min_pixels, s.name, detail);
     }
 
-    const bool ok = woke::png::write_rgb(path, w, h, flip);
-    delete[] pix;
-    delete[] flip;
-    return ok;
+    // -- filter semantics: a filtered list must actually be shorter, and an
+    // -- unfiltered one must be complete. Without both halves a filter that
+    // -- silently stopped working would still look fine in a screenshot.
+    char detail[128];
+    if (filtered) {
+        std::snprintf(detail, sizeof(detail), "visible=%d total=%d",
+                      d.visible_cards, card_total);
+        v.check(d.visible_cards >= 1 && d.visible_cards < card_total,
+                "filter_narrowed", detail);
+    } else {
+        std::snprintf(detail, sizeof(detail), "visible=%d total=%d",
+                      d.visible_cards, card_total);
+        v.check(d.visible_cards == card_total, "all_cards_shown", detail);
+    }
+
+    // -- scrolling: with every card shown the list has to overflow its pane,
+    // -- which is the entire reason the pane scrolls. A filtered list is
+    // -- legitimately short, so there is nothing to assert in that case.
+    std::snprintf(detail, sizeof(detail), "scroll_max_y=%.1f",
+                  static_cast<double>(d.scroll_max_y));
+    if (filtered) {
+        std::printf("[woketool] note   pane_overflows  skipped: filtered list may "
+                    "legitimately fit (%s)\n", detail);
+    } else {
+        v.check(d.scroll_max_y > 0.0f, "pane_overflows", detail);
+    }
+
+    // -- accessibility invariant: the switch is what sets the motion scale,
+    // -- and everything timed has to obey it. Asserting the relationship
+    // -- rather than "0.35 was passed in" is what makes this a real check.
+    const float expected = reduced_motion ? woke::theme::time::reduced_motion_scale
+                                          : 1.0f;
+    std::snprintf(detail, sizeof(detail), "motion_scale=%.3f expected=%.3f",
+                  static_cast<double>(d.motion_scale), static_cast<double>(expected));
+    v.check(d.motion_scale > expected - 1e-3f && d.motion_scale < expected + 1e-3f,
+            "motion_scale", detail);
+
+    const float scaled = expected * woke::theme::time::window_appear;
+    std::snprintf(detail, sizeof(detail), "window_appear=%.4fs expected=%.4fs",
+                  static_cast<double>(d.window_appear_s), static_cast<double>(scaled));
+    v.check(d.window_appear_s > scaled - 1e-4f && d.window_appear_s < scaled + 1e-4f,
+            "appear_scaled", detail);
+
+    std::printf("[woketool] verify checks=%d failed=%d\n", v.checks, v.failed);
+    return v.failed;
 }
 
 } // namespace
@@ -87,6 +249,7 @@ bool write_screenshot_png(const char *path, int w, int h) {
 // -------------------------------------------------------------------- main
 int main(int argc, char **argv) {
     bool        mode_screenshot = false;
+    bool        mode_verify     = false;
     bool        mode_once       = false;
     bool        park_mouse      = false;
     // Whether --reduced-motion was actually given: it overrides the loaded
@@ -121,6 +284,8 @@ int main(int argc, char **argv) {
         } else if (std::strcmp(argv[i], "--set") == 0 && i + 1 < argc) {
             if (set_kv_count < static_cast<int>(sizeof(set_kv) / sizeof(set_kv[0])))
                 set_kv[set_kv_count++] = argv[++i];
+        } else if (std::strcmp(argv[i], "--verify") == 0) {
+            mode_verify = true;
         } else if (std::strcmp(argv[i], "--park-mouse") == 0) {
             park_mouse = true;
         } else if (std::strcmp(argv[i], "--reduced-motion") == 0) {
@@ -236,9 +401,10 @@ int main(int argc, char **argv) {
     if (reduced_motion) gui.set_reduced_motion(true);
     gui.toast("woke.wtf", "UI online", woke::ui::notifications::Kind::kSuccess);
 
-    double last = glfwGetTime();
-    int    frames = 0;
-    bool   done = false;
+    double last      = glfwGetTime();
+    int    frames    = 0;
+    bool   done      = false;
+    int    exit_code = 0;   // only --verify can fail the run
     while (!done && !glfwWindowShouldClose(win)) {
         glfwPollEvents();
 
@@ -302,20 +468,55 @@ int main(int argc, char **argv) {
         // the previous frame, which would silently offset every measurement by
         // one frame (harmless for settled shots, wrong for timed ones).
         ++frames;
-        if (mode_screenshot && frames >= shot_frames) {
+
+        // A --verify run has to assert on a settled frame. Frame count alone is
+        // not enough to know it is one: the appear tween multiplies the ambient
+        // alpha, so a capture taken mid-flight is a blend of every surface
+        // rather than the palette — and a short (filtered) list renders fast
+        // enough that 60 frames pass before a 220 ms tween is done. So wait for
+        // the GUI to report itself fully open as well, with a generous bound so
+        // the loop still terminates (and then fails loudly) if it never does.
+        // An intentional mid-flight --screenshot is unaffected: it is only
+        // --verify that requires the settled state.
+        const auto before = gui.diagnostics();
+        const bool settled = !mode_verify || before.window_open >= 0.999f;
+        const bool waited_long_enough = frames >= shot_frames * 10;
+
+        if ((mode_screenshot || mode_verify) && frames >= shot_frames &&
+            (settled || waited_long_enough)) {
             int fb_w = 0, fb_h = 0;
             glfwGetFramebufferSize(win, &fb_w, &fb_h);
-            const bool ok = write_screenshot_png(shot_path, fb_w, fb_h);
+
+            Frame frame;
+            const bool grabbed = grab_frame(fb_w, fb_h, frame);
+            const bool png_ok  = !mode_screenshot ||
+                (grabbed && woke::png::write_rgb(shot_path, frame.w, frame.h,
+                                                 frame.rgb.data()));
+
             // Machine-checkable evidence: the filters actually narrowed the
             // list, the scrolled pane reports a non-zero extent, and the
             // accessibility switch really shortened the animation timing.
             const auto d = gui.diagnostics();
-            std::printf("[woketool] png=%s %dx%d visible_cards=%d "
+            const char *head = mode_screenshot ? "png" : "verify";
+            const char *state = mode_screenshot ? (png_ok ? "ok" : "failed")
+                                                : "frame";
+            std::printf("[woketool] %s=%s %dx%d visible_cards=%d "
                         "scroll_max_y=%.1f motion_scale=%.2f "
                         "window_appear=%.3fs enabled_cards=%d\n",
-                        ok ? "ok" : "failed", fb_w, fb_h,
+                        head, state, fb_w, fb_h,
                         d.visible_cards, d.scroll_max_y,
                         d.motion_scale, d.window_appear_s, d.enabled_cards);
+
+            if (mode_verify) {
+                const int failures =
+                    grabbed ? verify_frame(frame, d, gui.reduced_motion(),
+                                           gui.card_total(), search_text != nullptr)
+                            : 1;
+                if (!grabbed)
+                    std::printf("[woketool] check=FAIL %-15s framebuffer grab "
+                                "failed\n", "frame_grab");
+                if (failures > 0) exit_code = 1;
+            }
             done = true;
         }
 
@@ -340,5 +541,5 @@ int main(int argc, char **argv) {
     glfwDestroyWindow(win);
     glfwTerminate();
     woke::log::shutdown();
-    return 0;
+    return exit_code;
 }

@@ -17,13 +17,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # GLFW's X11 backend needs the X11/GL development headers; the JDK is
-      # not required to build libwoke.so (JNI headers are vendored below).
+      # GLFW's X11 backend needs the X11/GL development headers, the UI harness
+      # needs a display and a software GL stack (Xvfb + Mesa), and DejaVu is the
+      # font the harness screenshots were calibrated against. The JDK is not
+      # required to build libwoke.so (JNI headers are vendored below).
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake xorg-dev libgl1-mesa-dev
+            build-essential cmake xorg-dev libgl1-mesa-dev \
+            xvfb libgl1-mesa-dri fonts-dejavu-core
 
       - name: Bootstrap vendored dependencies
         run: sh ./scripts/fetch_deps.sh
@@ -45,10 +48,18 @@ jobs:
             fi
             tail -n 3 "$log"
             # Vendored trees are not ours to keep warning-free; everything else
-            # is, so any other warning fails the build.
-            warnings=$(grep -E "warning:" "$log" | grep -v "/third_party/" || true)
+            # is, so any other warning fails the build. Matched on the bare
+            # directory name so a relative path is excluded too. Note the limit:
+            # a warning anchored in a libc inline names "third_party/" nowhere,
+            # so a vendored tree that trips one has to be quieted in CMake
+            # (see the funchook note there) rather than filtered here.
+            warnings=$(grep -E "warning:" "$log" | grep -v "third_party/" || true)
             if [ -n "$warnings" ]; then
-              echo "$warnings"
+              # A warning raised inside a libc inline carries its real location
+              # on the "inlined from" note lines rather than on the warning
+              # line, so print the whole diagnostic — a report without a
+              # file:line cannot be acted on.
+              grep -E -B2 -A8 "warning:" "$log" | grep -v "third_party/"
               echo "::error::$preset build emitted compiler warnings"
               exit 1
             fi
@@ -75,6 +86,71 @@ jobs:
             fi
           done
 
+      # The UI is verified the way the JVM layer is: by running it. Xvfb gives
+      # GLFW a display and Mesa a software GL context, so the harness renders
+      # the real stack with no game and no injection, then asserts on the pixels
+      # it produced (--verify exits non-zero on its own; the greps below pin the
+      # specific expectations, including that a filter really narrowed the list).
+      #
+      # A screenshot is uploaded as an artifact, so a palette regression can be
+      # looked at rather than only read about.
+      - name: macOS UI harness (Xvfb)
+        run: |
+          set -euo pipefail
+          export LIBGL_ALWAYS_SOFTWARE=1   # llvmpipe everywhere = reproducible pixels
+          # Every invocation must ask for a capture: with no --screenshot/
+          # --verify/--once the tool is the interactive window and would render
+          # until closed. The timeout is the guard for exactly that mistake —
+          # a stalled harness has to fail the job, not idle until the runner
+          # gives up.
+          run_ui() { timeout -s KILL 120 xvfb-run -a -s "-screen 0 1280x800x24" "$@"; }
+          shot="build/linux-release/ui-baseline.png"
+
+          echo "--- 1. baseline: palette, layout, accessibility ---"
+          run_ui ./build/linux-release/woketool --screenshot "$shot" \
+            --frames 60 --park-mouse --verify | tee /tmp/ui-baseline.log
+          grep -q "verify checks=14 failed=0" /tmp/ui-baseline.log
+          grep -q "all_cards_shown visible=16 total=16" /tmp/ui-baseline.log
+
+          echo "--- 2. reduced motion ---"
+          run_ui ./build/linux-release/woketool --frames 60 --park-mouse \
+            --reduced-motion --verify | tee /tmp/ui-motion.log
+          grep -q "verify checks=14 failed=0" /tmp/ui-motion.log
+          grep -q "motion_scale=0.350" /tmp/ui-motion.log
+
+          echo "--- 3. search filter ---"
+          run_ui ./build/linux-release/woketool --frames 60 --park-mouse \
+            --search motion --verify | tee /tmp/ui-filter.log
+          grep -q "verify checks=13 failed=0" /tmp/ui-filter.log
+          grep -q "filter_narrowed visible=1 total=16" /tmp/ui-filter.log
+
+          echo "--- 4. settings survive a restart ---"
+          rm -f /tmp/woke-ui.conf
+          run_ui ./build/linux-release/woketool --frames 30 --park-mouse \
+            --config /tmp/woke-ui.conf --set card.reduced_motion=1 \
+            --set card.clock=1 --verify | tee /tmp/ui-write.log
+          grep -q "set_applied=2 of 2" /tmp/ui-write.log
+          grep -q "config_save=ok" /tmp/ui-write.log
+          grep -q "card.reduced_motion = 1" /tmp/woke-ui.conf
+          grep -q "card.clock = 1" /tmp/woke-ui.conf
+
+          # No switches on the command line this time: the motion scale and the
+          # switch census below can only come from the file, which is what makes
+          # this a restore test rather than a repeat of the write above.
+          run_ui ./build/linux-release/woketool --frames 30 --park-mouse \
+            --config /tmp/woke-ui.conf --verify | tee /tmp/ui-restore.log
+          grep -q "entries=17 applied=17" /tmp/ui-restore.log
+          grep -q "motion_scale=0.35" /tmp/ui-restore.log
+          grep -q "enabled_cards=5" /tmp/ui-restore.log
+
+      - name: Upload rendered UI screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: woke-ui-screenshot
+          path: build/linux-release/ui-baseline.png
+          if-no-files-found: warn
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -100,3 +176,71 @@ jobs:
             grep -q "ClientStartedEvent received" logs/latest.log
             grep -q "worker thread exiting (executed=1 dropped=0)" logs/latest.log
           done
+
+  # Sanitizers run as their own job so a finding is legible: the same suite and
+  # the same harness, but only a sanitizer report can turn this one red. The
+  # build type is RelWithDebInfo — optimized enough to expose optimizer-dependent
+  # bugs, with symbols for the report.
+  sanitizers:
+    name: ASan + UBSan (unit tests + UI harness)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake xorg-dev libgl1-mesa-dev \
+            xvfb libgl1-mesa-dri fonts-dejavu-core
+
+      - name: Bootstrap vendored dependencies
+        run: sh ./scripts/fetch_deps.sh
+
+      - name: Configure preset
+        run: cmake --preset linux-release-asan
+
+      - name: Build (sanitized, zero warnings)
+        run: |
+          log=/tmp/asan-build.log
+          if ! cmake --build --preset linux-release-asan -j"$(nproc)" >"$log" 2>&1; then
+            cat "$log"
+            exit 1
+          fi
+          tail -n 3 "$log"
+          warnings=$(grep -E "warning:" "$log" | grep -v "third_party/" || true)
+          if [ -n "$warnings" ]; then
+            # See the equivalent gate above: the file:line of a warning inside
+            # a libc inline is on the note lines, so dump the diagnostic.
+            grep -E -B2 -A8 "warning:" "$log" | grep -v "third_party/"
+            echo "::error::linux-release-asan build emitted compiler warnings"
+            exit 1
+          fi
+
+      # Leak detection is on here: the unit suite is the one run that touches no
+      # driver or display server, so anything ASan reports is ours.
+      - name: Unit tests under ASan + UBSan
+        run: |
+          ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 \
+          UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
+          ctest --test-dir build/linux-release-asan --output-on-failure
+
+      # Same render paths as the step above, now instrumented — the unit suite
+      # links none of the drawing code, so this is where components, chrome and
+      # the draw-list helpers get their sanitizer coverage. Leak detection is off
+      # for this run only: Mesa and GLFW allocate at init and never free, and a
+      # report about somebody else's driver is noise, not a finding.
+      - name: macOS UI harness under sanitizers (Xvfb)
+        run: |
+          set -euo pipefail
+          export LIBGL_ALWAYS_SOFTWARE=1
+          ASAN_OPTIONS=detect_leaks=0:abort_on_error=1 \
+          UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
+          timeout -s KILL 180 xvfb-run -a -s "-screen 0 1280x800x24" \
+            ./build/linux-release-asan/woketool --frames 60 --park-mouse \
+            --verify | tee /tmp/ui-asan.log
+          # The sanitized build must agree with the release one pixel-for-pixel:
+          # identical counts also prove the harness itself is deterministic.
+          grep -q "verify checks=14 failed=0" /tmp/ui-asan.log
+          grep -q "all_cards_shown visible=16 total=16" /tmp/ui-asan.log

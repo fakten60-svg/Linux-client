@@ -172,6 +172,10 @@ void ClickGui::draw(float dt) {
         open_t = anim_.tween("win.open", open_t, open_target,
                              theme::time::window_appear);
 
+    // Reported before the early-out below, since "the window is closed" is
+    // exactly the state a harness waiting to capture needs to see.
+    diag_.window_open = open_t;
+
     anim_.update(dt);
 
     if (open_t <= 0.001f) return; // fully closed: no frame cost
