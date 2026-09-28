@@ -85,6 +85,11 @@ public:
     /// Entries held in memory (applied + unknown) — what a save will write.
     int config_entries() const { return config_.count(); }
 
+    /// Cards the GUI holds, before the category and search filters. The
+    /// harness compares it against Diagnostics::visible_cards to prove a
+    /// filter narrowed the list rather than the list simply being short.
+    int card_total() const { return card_count_; }
+
     /// Apply one `key = value` edit from outside the UI (woketool's --set, and
     /// the same path the file loader uses). Marks the settings dirty so the
     /// change is written back. Returns false for an unrecognised key.
