@@ -42,8 +42,9 @@
 //                         scale the timing it promises to. This is what turns
 //                         "a human looked at the PNG" into something CI can
 //                         gate on. Implies a capture, with or without
-//                         --screenshot; run it on settled frames (the default
-//                         --frames 60 is well past the appear tween).
+//                         --screenshot, and waits for the window to report
+//                         itself fully open first, so the checks always see the
+//                         settled palette however fast the machine renders.
 // ============================================================================
 
 #include <cstdio>
@@ -467,7 +468,22 @@ int main(int argc, char **argv) {
         // the previous frame, which would silently offset every measurement by
         // one frame (harmless for settled shots, wrong for timed ones).
         ++frames;
-        if ((mode_screenshot || mode_verify) && frames >= shot_frames) {
+
+        // A --verify run has to assert on a settled frame. Frame count alone is
+        // not enough to know it is one: the appear tween multiplies the ambient
+        // alpha, so a capture taken mid-flight is a blend of every surface
+        // rather than the palette — and a short (filtered) list renders fast
+        // enough that 60 frames pass before a 220 ms tween is done. So wait for
+        // the GUI to report itself fully open as well, with a generous bound so
+        // the loop still terminates (and then fails loudly) if it never does.
+        // An intentional mid-flight --screenshot is unaffected: it is only
+        // --verify that requires the settled state.
+        const auto before = gui.diagnostics();
+        const bool settled = !mode_verify || before.window_open >= 0.999f;
+        const bool waited_long_enough = frames >= shot_frames * 10;
+
+        if ((mode_screenshot || mode_verify) && frames >= shot_frames &&
+            (settled || waited_long_enough)) {
             int fb_w = 0, fb_h = 0;
             glfwGetFramebufferSize(win, &fb_w, &fb_h);
 

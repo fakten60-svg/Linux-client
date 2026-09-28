@@ -107,6 +107,13 @@ public:
         /// Effective duration of the window appear/close tween under that
         /// factor — the value the pixel-level A/B of animation timing reads.
         float window_appear_s = 0.0f;
+        /// How open the window is right now (1.0 = settled). The appear tween
+        /// multiplies the ambient alpha, so a frame captured mid-flight is a
+        /// blend of every surface rather than the palette; a headless harness
+        /// has to wait for this to reach 1.0 before asserting on pixels, and
+        /// it cannot rely on the frame count, because a short (filtered) list
+        /// renders fast enough to finish 60 frames before a 220 ms tween ends.
+        float window_open     = 0.0f;
         /// Switches currently on, across the whole (unfiltered) card list.
         int   enabled_cards = 0;
     };

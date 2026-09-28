@@ -201,6 +201,13 @@ Motion switch asks for. Flat fills are matched exactly; type is matched with a
 ±6 per-channel allowance, because antialiased glyphs are almost never exactly
 their own colour.
 
+Because the appear tween scales the ambient alpha, `--verify` waits for the
+window to report itself fully open before capturing — a mid-flight frame is a
+blend of every surface rather than the palette. That has to come from the
+tween's own state and not from a frame count: on a fast machine a filtered list
+can finish 60 frames before the 220 ms tween ends. An intentional mid-flight
+`--screenshot` (the `--closed-frames` A/B above) is unaffected.
+
 #### Settings persistence
 
 The card switches and the active sidebar group are stored in a plain-text file
