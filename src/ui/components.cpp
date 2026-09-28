@@ -96,9 +96,9 @@ PillToggle::State PillToggle::draw(AnimationController &anim, ImVec2 min,
 // --- ModuleCard -------------------------------------------------------------
 
 ModuleCard::ModuleCard(const char *title, const char *description,
-                       const char *keybind, int category)
+                       const char *keybind, int category, bool initial_on)
     : BaseUIComponent("mc", title), title_(title), description_(description),
-      keybind_(keybind), category_(category), toggle_(title, false) {}
+      keybind_(keybind), category_(category), toggle_(title, initial_on) {}
 
 CardEvent ModuleCard::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
                            float dt) {

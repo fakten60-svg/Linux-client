@@ -97,10 +97,11 @@ Additional CMake switches: `-DWOKE_ENABLE_SANITIZERS=ON`, `-DWOKE_ENABLE_LTO=ON|
 │   ├── ui/components.*       # PillToggle, ModuleCard, CategoryItem, SearchBar
 │   ├── ui/clickgui.*         # macOS chrome: traffic lights, sidebar, filter, cards
 │   ├── ui/notifications.*    # toast queue (FixedString, zero-alloc draw)
+│   ├── ui/settings.*         # `key = value` settings file (load/save, no heap)
 │   ├── jvm/... hooks/...     # JVM reflection + funchook layers (Phases 3–4)
 │   └── woke.ld               # version script: only JNI_OnLoad/OnUnLoad export
 ├── tools/woketool/           # standalone GLFW+GL3 app rendering the ui/ stack
-│   └── main.cpp              #   --screenshot/--frames/--search/--once flags
+│   └── main.cpp              #   --screenshot/--frames/--search/--config/--set flags
 ├── tests/jvm/                # live-JVM verification harness (stubs + probe)
 └── logs/                     # runtime session logs (gitignored)
 
@@ -123,10 +124,57 @@ Each screenshot run prints machine-checkable evidence, so filtering, the scroll
 extent and the active animation scale are verifiable without a mouse:
 
 ```
-[woketool] png=ok 960x600 visible_cards=16 scroll_max_y=722.0 motion_scale=1.00 window_appear=0.220s
-[woketool] png=ok 960x600 visible_cards=1  scroll_max_y=0.0   motion_scale=1.00 window_appear=0.220s   # --search motion
-[woketool] png=ok 960x600 visible_cards=0  scroll_max_y=0.0   motion_scale=1.00 window_appear=0.220s   # --search zzz
+[woketool] png=ok 960x600 visible_cards=16 scroll_max_y=722.0 motion_scale=1.00 window_appear=0.220s enabled_cards=3
+[woketool] png=ok 960x600 visible_cards=1  scroll_max_y=0.0   motion_scale=1.00 window_appear=0.220s enabled_cards=3   # --search motion
+[woketool] png=ok 960x600 visible_cards=0  scroll_max_y=0.0   motion_scale=1.00 window_appear=0.220s enabled_cards=3   # --search zzz
 ```
+
+The pointer rests at the screen centre under a bare Xvfb display, which hovers
+whichever card sits there and quietly pollutes any screenshot-to-screenshot
+diff; `--park-mouse` keeps it off the UI for that reason.
+
+#### Settings persistence
+
+The card switches and the active sidebar group are stored in a plain-text file
+(`src/ui/settings.*`), one `key = value` per line:
+
+```
+ui.category = 0
+card.notifications = 1
+card.reduced_motion = 0
+...
+```
+
+Keys are derived from card titles (`Reduced Motion` -> `card.reduced_motion`),
+so reordering the card array cannot silently reinterpret an existing file, and
+unknown keys survive a load/save round-trip so a file written by a newer build
+keeps its extra settings. Booleans accept `1/0`, `true/false`, `on/off` and
+`yes/no` — the file is meant to be hand-edited.
+
+`ClickGui` is path-agnostic; the shell decides where settings live. `woketool`
+persists only when pointed at a file, because a screenshot tool must not rewrite
+the user's real settings (and a persisted file would change the outcome of the
+pixel checks above):
+
+```sh
+# process 1: flip a switch through the real click path, write the file
+xvfb-run -a ./build/linux-release/woketool --park-mouse --config /tmp/woke.conf \
+    --click-motion-at 30 --screenshot a.png --frames 60
+# process 2: same file, no flags — the switch comes back on by itself
+xvfb-run -a ./build/linux-release/woketool --park-mouse --config /tmp/woke.conf \
+    --screenshot b.png --frames 60
+# process 3: a fresh path starts from the factory defaults
+xvfb-run -a ./build/linux-release/woketool --park-mouse --config /tmp/fresh.conf \
+    --screenshot c.png --frames 60
+```
+
+`--set card.reduced_motion=1` (repeatable, same syntax as the file) applies an
+edit after loading and reports it as `set_applied`, so the file format, the
+parser and the UI can be driven from one command line. The `Config Autosave`
+card decides whether a change is written immediately (`autosave=ok` line) or
+only on exit; the exit save happens either way, so a run pointed at a file
+always leaves that file holding the live state. The app shell passes
+`$HOME/.config/woke/woke.conf` (overridable with `$WOKE_CONFIG`).
 
 #### Reduced Motion (accessibility)
 
@@ -178,10 +226,10 @@ interface-settings mock data — no gameplay modules.
 - [x] Phase 4 — event bus + game-thread dispatch (bounded queue, dedicated
       worker that attaches to the JVM per drain batch, module finaliser joins it)
 - [x] Phase 5 — macOS UI stack: theme/animation/components/chrome/toasts plus
-      live search + category filtering over the card list and a working
-      Reduced Motion switch that rescales every animation, verified via the
-      standalone `woketool` harness (injection-side graphics hooks
-      intentionally not pursued)
+      live search + category filtering over the card list, a working
+      Reduced Motion switch that rescales every animation, and settings
+      persistence, all verified via the standalone `woketool` harness
+      (injection-side graphics hooks intentionally not pursued)
 
 ### Mappings
 
