@@ -91,7 +91,7 @@ Additional CMake switches: `-DWOKE_ENABLE_SANITIZERS=ON`, `-DWOKE_ENABLE_LTO=ON|
 │   ├── core/thread_dispatch.*# game-thread task queue (the mc.execute() analogue)
 │   ├── utils/math_utils.h    # pure easing/lerp/spring primitives (header-only)
 │   ├── utils/string_utils.h  # ASCII case-insensitive search helper (header-only)
-│   ├── utils/render_utils.*  # stateless DrawList helpers (shadow, gradient, clip)
+│   ├── utils/render_utils.*  # DrawList helpers (shadow, gradient, clip) + ambient alpha
 │   ├── ui/theme.h            # macOS palette/radii/timing as constexpr tokens
 │   ├── ui/animation.*        # named float channels: tween + exponential damp
 │   ├── ui/components.*       # PillToggle, ModuleCard, CategoryItem, SearchBar
@@ -119,14 +119,40 @@ timeout 60 xvfb-run -a ./build/linux-release/woketool \
     --screenshot ui-filtered.png --frames 45 --search motion
 ```
 
-Each screenshot run prints machine-checkable evidence, so filtering and the
-scroll extent are verifiable without a mouse:
+Each screenshot run prints machine-checkable evidence, so filtering, the scroll
+extent and the active animation scale are verifiable without a mouse:
 
 ```
-[woketool] png=ok 960x600 visible_cards=16 scroll_max_y=722.0
-[woketool] png=ok 960x600 visible_cards=1  scroll_max_y=0.0      # --search motion
-[woketool] png=ok 960x600 visible_cards=0  scroll_max_y=0.0      # --search zzz
+[woketool] png=ok 960x600 visible_cards=16 scroll_max_y=722.0 motion_scale=1.00 window_appear=0.220s
+[woketool] png=ok 960x600 visible_cards=1  scroll_max_y=0.0   motion_scale=1.00 window_appear=0.220s   # --search motion
+[woketool] png=ok 960x600 visible_cards=0  scroll_max_y=0.0   motion_scale=1.00 window_appear=0.220s   # --search zzz
 ```
+
+#### Reduced Motion (accessibility)
+
+The "Reduced Motion" card is not demo data: it writes the animation
+controller's global time scale (`theme::time::reduced_motion_scale = 0.35`),
+which shortens every tween duration, every damp smoothing constant and the
+toast slide — including its 40 px travel — at once. The hold time of a toast is
+deliberately left alone, because a dwell is not motion.
+
+Timing is reproducible headlessly with `--fixed-dt` (constant frame delta) and
+`--closed-frames` (hold the window shut so the appear transition can be sampled
+mid-flight):
+
+```sh
+D=0.0166667   # 60 fps
+# capture 7 frames into the appear transition, switch off and on
+xvfb-run -a ./build/linux-release/woketool --screenshot off.png \
+    --frames 13 --fixed-dt $D --closed-frames 6
+xvfb-run -a ./build/linux-release/woketool --screenshot on.png \
+    --frames 13 --fixed-dt $D --closed-frames 6 --reduced-motion
+```
+
+The window learns its full-opacity state (card body `#1C222D`) by frame 13 with
+the switch on, and is still only a third of the way there with it off;
+`--click-motion-at <frame>` synthesizes a click on the switch itself, so the
+real click -> state -> animation-scale path is exercised without a user.
 
 The build gates on zero warnings; the pixel checks assert the exact spec
 palette (traffic lights #FF5F56/#FFBD2E/#27C93F, backdrop #0B0E14, sidebar
@@ -152,7 +178,8 @@ interface-settings mock data — no gameplay modules.
 - [x] Phase 4 — event bus + game-thread dispatch (bounded queue, dedicated
       worker that attaches to the JVM per drain batch, module finaliser joins it)
 - [x] Phase 5 — macOS UI stack: theme/animation/components/chrome/toasts plus
-      live search + category filtering over the card list, verified via the
+      live search + category filtering over the card list and a working
+      Reduced Motion switch that rescales every animation, verified via the
       standalone `woketool` harness (injection-side graphics hooks
       intentionally not pursued)
 

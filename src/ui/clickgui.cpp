@@ -48,11 +48,23 @@ int ClickGui::count_visible() const {
 }
 
 void ClickGui::draw(float dt) {
+    // -- accessibility: "Reduce Motion" --
+    // Read from the card every frame, so flipping the switch takes effect on
+    // the next animation (including the toast slide, which reads the same
+    // scale). One place honours the preference for the whole UI.
+    anim_.set_motion_scale(reduced_motion() ? theme::time::reduced_motion_scale
+                                            : 1.0f);
+    diag_.motion_scale    = anim_.motion_scale();
+    diag_.window_appear_s = anim_.scaled(theme::time::window_appear);
+
     // -- window open/close animation --
-    // macOS sheets animate fade+lift on appear (ease_out_cubic for entrances
-    // per spec). Submitted every frame while animating so the channel runs;
-    // at alpha 0 nothing is drawn and the cost is two float ops.
-    float open_t = anim_.value("win.open", open_ ? 1.0f : 0.0f);
+    // macOS sheets cross-fade on appear (ease_in_out_quart here, the curve the
+    // controller applies). Submitted every frame while animating so the channel
+    // runs; at alpha 0 nothing is drawn and the cost is two float ops.
+    // An absent channel reads as fully closed (0.0), NOT as the current target:
+    // seeding it with the target makes the very first tween a no-op and the
+    // window would pop in with no animation at all.
+    float open_t = anim_.value("win.open", 0.0f);
     const float open_target = open_ ? 1.0f : 0.0f;
     if (open_t != open_target)
         open_t = anim_.tween("win.open", open_t, open_target,
@@ -83,22 +95,33 @@ void ClickGui::draw(float dt) {
         const ImVec2 wmax = ImVec2(wmin.x + theme::metric::window_w,
                                    wmin.y + theme::metric::window_h);
 
+        // The chrome is drawn by hand, so the appear/close fade has to be
+        // applied by hand too — see the ambient-alpha note in render_utils.h.
+        // One factor covers the shadow, shell, sidebar, cards and text, which
+        // is what makes open_t an actual cross-fade rather than a pop.
+        render::set_ambient_alpha(open_t);
+
         // -- 3-layer soft shadow (macOS key-window style) --
         render::soft_shadow(dl, wmin, wmax, theme::metric::window_rounding,
                             14.0f, 90);
 
         // -- 1px cool stroke (spec) --
-        dl->AddRect(wmin, wmax, theme::color::window_stroke,
-                    theme::metric::window_rounding, 0,
-                    theme::metric::stroke_w);
+        render::rounded_rect(dl, wmin, wmax, 0, theme::color::window_stroke,
+                             theme::metric::window_rounding,
+                             theme::metric::stroke_w);
 
         draw_title_bar(wmin, wmax, dt);
         draw_sidebar(wmin, wmax, dt);
         draw_cards(wmin, wmax, dt);
 
         // -- toasts float above everything --
+        // They carry their own per-toast alpha, so the ambient factor is
+        // released before they draw — and released even when the GUI is
+        // closed, so nothing else in the frame inherits it.
+        render::set_ambient_alpha(1.0f);
         toasts_.draw(anim_, dt);
     }
+    render::set_ambient_alpha(1.0f);
     ImGui::End();
     ImGui::PopStyleColor(1);
     ImGui::PopStyleVar(4);
@@ -150,14 +173,14 @@ void ClickGui::draw_title_bar(ImVec2 win_min, ImVec2 win_max, float dt) {
     // -- centered title (spec: muted gray, centered) --
     const char *title = "woke.wtf — Utility Client";
     const ImVec2 ts = ImGui::CalcTextSize(title);
-    dl->AddText(ImVec2((win_min.x + win_max.x - ts.x) * 0.5f,
-                       win_min.y + (h - ts.y) * 0.5f),
-                theme::color::title_bar_text, title);
+    render::text(dl, ImVec2((win_min.x + win_max.x - ts.x) * 0.5f,
+                            win_min.y + (h - ts.y) * 0.5f),
+                 theme::color::title_bar_text, title);
 
     // -- hairline separator under the title bar --
-    dl->AddLine(ImVec2(win_min.x, win_min.y + h),
-                ImVec2(win_max.x, win_min.y + h),
-                theme::color::window_stroke, theme::metric::stroke_w);
+    render::line(dl, ImVec2(win_min.x, win_min.y + h),
+                 ImVec2(win_max.x, win_min.y + h),
+                 theme::color::window_stroke, theme::metric::stroke_w);
 }
 
 void ClickGui::draw_sidebar(ImVec2 win_min, ImVec2 win_max, float dt) {
@@ -169,8 +192,9 @@ void ClickGui::draw_sidebar(ImVec2 win_min, ImVec2 win_max, float dt) {
     // Sidebar surface: one lightness step above the window base. macOS
     // source lists sit *lighter* than the content pane — inverted from most
     // dark themes, but it is what makes it read as macOS.
-    dl->AddRectFilled(ImVec2(win_min.x, top), ImVec2(win_min.x + w, win_max.y),
-                      theme::color::sidebar_bg);
+    render::rounded_rect(dl, ImVec2(win_min.x, top),
+                         ImVec2(win_min.x + w, win_max.y),
+                         theme::color::sidebar_bg, 0, 0.0f);
 
     // -- search field --
     const float pad = 12.0f;
@@ -185,8 +209,8 @@ void ClickGui::draw_sidebar(ImVec2 win_min, ImVec2 win_max, float dt) {
         const int shown = count_visible();
         char buf[32];
         std::snprintf(buf, sizeof(buf), "%d of %d shown", shown, card_count_);
-        dl->AddText(ImVec2(smin.x + 2.0f, smax.y + 6.0f),
-                    theme::color::text_muted, buf);
+        render::text(dl, ImVec2(smin.x + 2.0f, smax.y + 6.0f),
+                     theme::color::text_muted, buf);
     }
 
     // -- categories --
@@ -246,12 +270,20 @@ void ClickGui::draw_cards(ImVec2 win_min, ImVec2 win_max, float dt) {
             ImVec2(origin.x + card_w, origin.y + y + card_h), dt);
 
         switch (ev) {
-        case CardEvent::kToggleChanged:
+        case CardEvent::kToggleChanged: {
+            const bool on = cards_[i].is_on();
+            // The accessibility switch reports what it actually did to the UI
+            // rather than a generic on/off, so the change is visible in the
+            // window itself as well as in the toast.
+            const bool is_motion = (i == kReducedMotionIndex);
             toasts_.push(cards_[i].title(),
-                         cards_[i].is_on() ? "enabled" : "disabled",
-                         cards_[i].is_on() ? notifications::Kind::kSuccess
-                                           : notifications::Kind::kInfo);
+                         is_motion ? (on ? "animations shortened"
+                                         : "animations at full speed")
+                                   : (on ? "enabled" : "disabled"),
+                         on ? notifications::Kind::kSuccess
+                            : notifications::Kind::kInfo);
             break;
+        }
         case CardEvent::kBodyClicked:
             // The description is clipped on the card, so the toast is where you
             // read it in full.
@@ -278,9 +310,10 @@ void ClickGui::draw_cards(ImVec2 win_min, ImVec2 win_max, float dt) {
     if (shown == 0) {
         const char *msg = "No settings match";
         const ImVec2 ts = ImGui::CalcTextSize(msg);
-        ImGui::GetWindowDrawList()->AddText(
-            ImVec2(origin.x + (card_w - ts.x) * 0.5f, origin.y + 40.0f),
-            theme::color::text_muted, msg);
+        render::text(ImGui::GetWindowDrawList(),
+                     ImVec2(origin.x + (card_w - ts.x) * 0.5f,
+                            origin.y + 40.0f),
+                     theme::color::text_muted, msg);
     }
 
     ImGui::EndChild();

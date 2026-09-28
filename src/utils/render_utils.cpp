@@ -10,12 +10,38 @@
 
 namespace woke::render {
 
+namespace {
+/// Ambient alpha for the current frame. File-static rather than a parameter
+/// because it is a property of the *layer* being drawn, and threading it
+/// through every call site would touch every component signature for a value
+/// that only ever changes while the window is appearing or closing.
+float g_ambient_alpha = 1.0f;
+} // namespace
+
+void set_ambient_alpha(float a) {
+    if (a < 0.0f) a = 0.0f;
+    if (a > 1.0f) a = 1.0f;
+    g_ambient_alpha = a;
+}
+
+float ambient_alpha() { return g_ambient_alpha; }
+
 void rounded_rect(ImDrawList *dl, ImVec2 min, ImVec2 max, ImU32 fill,
                   ImU32 stroke, float rounding, float stroke_w) {
+    fill   = fade(fill, g_ambient_alpha);
+    stroke = fade(stroke, g_ambient_alpha);
     if ((fill & IM_COL32_A_MASK) != 0)
         dl->AddRectFilled(min, max, fill, rounding);
     if ((stroke & IM_COL32_A_MASK) != 0 && stroke_w > 0.0f)
         dl->AddRect(min, max, stroke, rounding, 0, stroke_w);
+}
+
+void text(ImDrawList *dl, ImVec2 pos, ImU32 color, const char *str) {
+    dl->AddText(pos, fade(color, g_ambient_alpha), str);
+}
+
+void line(ImDrawList *dl, ImVec2 a, ImVec2 b, ImU32 color, float thickness) {
+    dl->AddLine(a, b, fade(color, g_ambient_alpha), thickness);
 }
 
 void soft_shadow(ImDrawList *dl, ImVec2 min, ImVec2 max, float rounding,
@@ -31,7 +57,7 @@ void soft_shadow(ImDrawList *dl, ImVec2 min, ImVec2 max, float rounding,
         const int   a   = static_cast<int>(static_cast<float>(base_alpha) *
                                            l.alpha_scale / 7.0f);
         if (a <= 0) continue;
-        const ImU32 col = IM_COL32(0, 0, 0, a);
+        const ImU32 col = fade(IM_COL32(0, 0, 0, a), g_ambient_alpha);
         dl->AddRectFilled(ImVec2(min.x - g, min.y - g + 2.0f),
                           ImVec2(max.x + g, max.y + g + 4.0f),
                           col, rounding + g * 0.6f);
@@ -40,6 +66,8 @@ void soft_shadow(ImDrawList *dl, ImVec2 min, ImVec2 max, float rounding,
 
 void gradient_fill(ImDrawList *dl, ImVec2 min, ImVec2 max, ImU32 top,
                    ImU32 bottom, float rounding) {
+    top    = fade(top, g_ambient_alpha);
+    bottom = fade(bottom, g_ambient_alpha);
     dl->AddRectFilledMultiColor(min, max, top, top, bottom, bottom);
     // AddRectFilledMultiColor cannot round; cover the corners with four
     // small fill rects matching the top/bottom colors — visually identical
@@ -58,6 +86,8 @@ void gradient_fill(ImDrawList *dl, ImVec2 min, ImVec2 max, ImU32 top,
 
 void circle(ImDrawList *dl, ImVec2 center, float radius, ImU32 fill,
             ImU32 stroke, float stroke_w) {
+    fill   = fade(fill, g_ambient_alpha);
+    stroke = fade(stroke, g_ambient_alpha);
     if ((fill & IM_COL32_A_MASK) != 0)
         dl->AddCircleFilled(center, radius, fill);
     if ((stroke & IM_COL32_A_MASK) != 0 && stroke_w > 0.0f)
@@ -67,6 +97,7 @@ void circle(ImDrawList *dl, ImVec2 center, float radius, ImU32 fill,
 float text_clipped(ImDrawList *dl, ImVec2 pos, float max_w, const char *text,
                    ImU32 color) {
     if (text == nullptr || text[0] == '\0') return 0.0f;
+    color = fade(color, g_ambient_alpha);
     ImFont *font = ImGui::GetFont();
     const float font_h = ImGui::GetTextLineHeight();
     const float full_w = font->CalcTextSizeA(font_h, 3.402823466e+38F, 0.0f, text).x;

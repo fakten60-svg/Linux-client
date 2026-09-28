@@ -45,12 +45,28 @@ public:
     /// Pre-fill the search field (woketool's --search flag, config restore).
     void set_search(const char *text) { search_.set_text(text); }
 
+    /// The "Reduced Motion" switch is not a mock setting: it drives the
+    /// animation controller's global time scale. This is the same state a
+    /// click on that card produces, exposed for the harness and config load.
+    void set_reduced_motion(bool on) {
+        cards_[kReducedMotionIndex].set_on(on);
+    }
+    bool reduced_motion() const {
+        return cards_[kReducedMotionIndex].is_on();
+    }
+
     /// Per-frame read-out for the standalone harness: how many cards survived
-    /// the filters and how far the card pane can scroll. Printed by woketool so
-    /// filtering and the scroll extent are verifiable without a mouse.
+    /// the filters, how far the card pane can scroll, and which animation
+    /// scale is in force. Printed by woketool so filtering, scrolling and the
+    /// Reduced Motion effect are all verifiable without a mouse.
     struct Diagnostics {
         int   visible_cards = 0;
         float scroll_max_y  = 0.0f;
+        /// Active accessibility factor (1.0 = full motion).
+        float motion_scale  = 1.0f;
+        /// Effective duration of the window appear/close tween under that
+        /// factor — the value the pixel-level A/B of animation timing reads.
+        float window_appear_s = 0.0f;
     };
     Diagnostics diagnostics() const { return diag_; }
 
@@ -83,6 +99,11 @@ private:
         CategoryItem("System",     false),
     };
 
+    /// Index of the accessibility switch inside cards_, which is the one card
+    /// whose state is read by the UI itself. Keep in sync with the Appearance
+    /// block of the initializer below.
+    static constexpr int kReducedMotionIndex = 5;
+
     // Interface-settings demo cards (see header note). The trailing number is
     // the sidebar group the card belongs to.
     ModuleCard cards_[kMaxCards] = {
@@ -92,7 +113,7 @@ private:
         ModuleCard("Compact Cards",  "Denser card list.",                  "C", 1),
 
         ModuleCard("Auto Layout",    "Remember card positions.",           "L", 2),
-        ModuleCard("Reduced Motion", "Ease animations for accessibility.", nullptr, 2),
+        ModuleCard("Reduced Motion", "Shorten every UI animation.",     nullptr, 2),
         ModuleCard("Card Shadows",   "Soft drop shadows on cards.",        "H", 2),
         ModuleCard("Accent Tint",    "Use the system accent colour.",      "T", 2),
 

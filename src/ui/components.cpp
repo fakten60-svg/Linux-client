@@ -58,9 +58,12 @@ PillToggle::State PillToggle::draw(AnimationController &anim, ImVec2 min,
     if (clicked) state_on_ = !state_on_;
 
     // Retarget + advance through the shared controller (ease_in_out_quart,
-    // theme::time::knob = 180ms — Apple's NSSwitch cadence).
+    // theme::time::knob = 180ms — Apple's NSSwitch cadence, shortened by the
+    // controller's motion scale).
+    // An absent channel reads as *off*, not as the target: seeding it with the
+    // target would make the first flip an instant jump with no knob travel.
     const float target = state_on_ ? 1.0f : 0.0f;
-    float t = anim.value(key_t, target); // settled channels read as target
+    float t = anim.value(key_t, 0.0f);
     if (t != target) t = anim.tween(key_t, t, target, theme::time::knob);
 
     // -- track --
@@ -149,8 +152,8 @@ CardEvent ModuleCard::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
         const ImVec2 bmin(cx, (min.y + max.y) * 0.5f - bh * 0.5f);
         const ImVec2 bmax(bmin.x + bw, bmin.y + bh);
         render::rounded_rect(dl, bmin, bmax, 0, theme::color::card_stroke, 4.0f);
-        dl->AddText(ImVec2(bmin.x + 6.0f, bmin.y + (bh - ts.y) * 0.5f),
-                    theme::color::text_muted, keybind_);
+        render::text(dl, ImVec2(bmin.x + 6.0f, bmin.y + (bh - ts.y) * 0.5f),
+                     theme::color::text_muted, keybind_);
     }
 
     // -- pill --
@@ -181,13 +184,14 @@ bool CategoryItem::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
     // Accent bar: 3px rounded, fades with the same channel so it never pops.
     const ImU32 bar = theme::blend(0, theme::color::apple_blue, hov);
     if ((bar & IM_COL32_A_MASK) != 0)
-        dl->AddRectFilled(ImVec2(min.x, min.y + 4.0f),
-                          ImVec2(min.x + 3.0f, max.y - 4.0f), bar, 1.5f);
+        render::rounded_rect(dl, ImVec2(min.x, min.y + 4.0f),
+                             ImVec2(min.x + 3.0f, max.y - 4.0f), bar, 0, 1.5f);
 
     const float th = ImGui::GetTextLineHeight();
-    dl->AddText(ImVec2(min.x + 12.0f, (min.y + max.y - th) * 0.5f),
-                selected_ ? theme::color::text_primary : theme::color::text_muted,
-                label_);
+    render::text(dl, ImVec2(min.x + 12.0f, (min.y + max.y - th) * 0.5f),
+                 selected_ ? theme::color::text_primary
+                           : theme::color::text_muted,
+                 label_);
     return clicked;
 }
 
@@ -217,8 +221,9 @@ bool SearchBar::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
     const float cy = (min.y + max.y) * 0.5f;
     render::circle(dl, ImVec2(min.x + 14.0f, cy - 1.0f), 4.0f, 0,
                    theme::color::text_muted, 1.3f);
-    dl->AddLine(ImVec2(min.x + 17.0f, cy + 2.0f),
-                ImVec2(min.x + 19.5f, cy + 4.5f), theme::color::text_muted, 1.3f);
+    render::line(dl, ImVec2(min.x + 17.0f, cy + 2.0f),
+                 ImVec2(min.x + 19.5f, cy + 4.5f),
+                 theme::color::text_muted, 1.3f);
 
     // Input region — an ImGui input whose frame we drew ourselves.
     ImGui::SetCursorScreenPos(ImVec2(min.x + 26.0f, min.y + 4.0f));

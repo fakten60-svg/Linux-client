@@ -16,23 +16,22 @@
 namespace woke::ui {
 
 namespace {
-constexpr float kEnterSec  = theme::time::toast_slide;
 constexpr float kHoldSec   = theme::time::toast_hold;
-constexpr float kExitSec   = theme::time::toast_slide;
-constexpr float kLifeSec   = kEnterSec + kHoldSec + kExitSec;
-constexpr float kSlideDist = 40.0f; // px offscreen offset at t=0
+constexpr float kSlideDist = 40.0f; // px offscreen offset at t=0, before scaling
 constexpr float kStackGap  = 10.0f;
 
-/// Phase fractions for enter/hold/exit. Computed once — no per-frame alloc.
+/// Phase fractions for enter/hold/exit. The hold is a dwell time, not motion,
+/// so it is never scaled; the enter/exit durations and the travel distance are
+/// supplied by the caller already shortened by the controller's motion scale.
 enum class Phase { kEnter, kHold, kExit };
 
-Phase phase_of(float age, float *phase_t) {
-    if (age < kEnterSec) { *phase_t = age / kEnterSec; return Phase::kEnter; }
-    if (age < kEnterSec + kHoldSec) {
-        *phase_t = (age - kEnterSec) / kHoldSec;
+Phase phase_of(float age, float enter_s, float exit_s, float *phase_t) {
+    if (age < enter_s) { *phase_t = age / enter_s; return Phase::kEnter; }
+    if (age < enter_s + kHoldSec) {
+        *phase_t = (age - enter_s) / kHoldSec;
         return Phase::kHold;
     }
-    *phase_t = (age - kEnterSec - kHoldSec) / kExitSec;
+    *phase_t = (age - enter_s - kHoldSec) / exit_s;
     return Phase::kExit;
 }
 } // namespace
@@ -69,7 +68,14 @@ int NotificationQueue::active_count() const {
 }
 
 void NotificationQueue::draw(AnimationController &anim, float dt) {
-    (void)anim;
+    // "Reduce Motion" shortens the slide *and* the distance it covers: a
+    // faster version of the same travel would still be travel. The dwell time
+    // is untouched, so a toast stays readable for as long as before.
+    const float motion   = anim.motion_scale();
+    const float enter_s  = theme::time::toast_slide * motion;
+    const float exit_s   = theme::time::toast_slide * motion;
+    const float life_s   = enter_s + kHoldSec + exit_s;
+    const float slide_px = kSlideDist * motion;
 
     const ImGuiIO &io = ImGui::GetIO();
     const float margin = 16.0f;
@@ -84,16 +90,16 @@ void NotificationQueue::draw(AnimationController &anim, float dt) {
         if (!t.used) continue;
 
         t.age += dt;
-        if (t.age >= kLifeSec) { t.used = false; continue; }
+        if (t.age >= life_s) { t.used = false; continue; }
 
         float phase_t = 0.0f;
-        const Phase ph = phase_of(t.age, &phase_t);
+        const Phase ph = phase_of(t.age, enter_s, exit_s, &phase_t);
 
         // -- x-offset + alpha per phase --
         float offset = 0.0f, alpha = 1.0f;
         switch (ph) {
         case Phase::kEnter: // ease_out_cubic (entrance curve per spec)
-            offset = (1.0f - math::ease_out_cubic(phase_t)) * kSlideDist;
+            offset = (1.0f - math::ease_out_cubic(phase_t)) * slide_px;
             alpha  = phase_t;
             break;
         case Phase::kHold:
@@ -101,7 +107,7 @@ void NotificationQueue::draw(AnimationController &anim, float dt) {
             alpha  = 1.0f;
             break;
         case Phase::kExit: // accelerate back out, fade faster than move
-            offset = math::ease_in_out_quart(phase_t) * kSlideDist;
+            offset = math::ease_in_out_quart(phase_t) * slide_px;
             alpha  = 1.0f - phase_t;
             alpha *= alpha; // quadratic fade reads softer than linear
             break;

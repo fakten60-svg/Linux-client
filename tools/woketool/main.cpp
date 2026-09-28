@@ -14,6 +14,14 @@
 //    --once               render one frame and exit (CI smoke test)
 //    --search <text>      pre-fill the search field, so a filtered list can be
 //                         verified headlessly
+//    --reduced-motion     start with the "Reduced Motion" switch on
+//    --closed-frames <n>  hold the ClickGUI closed for the first n frames, so
+//                         the appear animation can be sampled mid-flight
+//    --fixed-dt <sec>     use a constant frame delta; makes animation timing
+//                         reproducible for headless A/B comparison
+//    --click-motion-at <n>  synthesize a click on the "Reduced Motion" switch
+//                         at frame n, exercising the real click -> state ->
+//                         animation-scale path with no user present
 // ============================================================================
 
 #include <cstdio>
@@ -67,9 +75,13 @@ bool write_screenshot_png(const char *path, int w, int h) {
 int main(int argc, char **argv) {
     bool        mode_screenshot = false;
     bool        mode_once       = false;
+    bool        reduced_motion  = false;
     const char *shot_path       = nullptr;
     const char *search_text     = nullptr;
     int         shot_frames     = 60;
+    int         closed_frames   = 0;
+    int         click_motion_at = -1;
+    double      fixed_dt        = 0.0;
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
@@ -79,6 +91,14 @@ int main(int argc, char **argv) {
             shot_frames = std::atoi(argv[++i]);
         } else if (std::strcmp(argv[i], "--search") == 0 && i + 1 < argc) {
             search_text = argv[++i];
+        } else if (std::strcmp(argv[i], "--closed-frames") == 0 && i + 1 < argc) {
+            closed_frames = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--fixed-dt") == 0 && i + 1 < argc) {
+            fixed_dt = std::atof(argv[++i]);
+        } else if (std::strcmp(argv[i], "--click-motion-at") == 0 && i + 1 < argc) {
+            click_motion_at = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--reduced-motion") == 0) {
+            reduced_motion = true;
         } else if (std::strcmp(argv[i], "--once") == 0) {
             mode_once = true;
         }
@@ -140,6 +160,9 @@ int main(int argc, char **argv) {
 
     woke::ui::ClickGui gui;
     if (search_text != nullptr) gui.set_search(search_text);
+    // Same state a click on the card produces — the switch drives the
+    // animation controller's time scale (see ClickGui::draw).
+    gui.set_reduced_motion(reduced_motion);
     gui.toast("woke.wtf", "UI online", woke::ui::notifications::Kind::kSuccess);
 
     double last = glfwGetTime();
@@ -152,10 +175,27 @@ int main(int argc, char **argv) {
         float dt = static_cast<float>(now - last);
         last = now;
         if (dt <= 0.0f || dt > 0.1f) dt = 1.0f / 60.0f;
+        if (fixed_dt > 0.0) dt = static_cast<float>(fixed_dt);
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
+
+        // Synthetic click on the "Reduced Motion" pill (the 6th card, right-
+        // hand switch). The position is fed one frame early so ImGui sees a
+        // settled mouse before the button goes down — it deliberately ignores a
+        // click that arrives together with a big pointer jump. Events must be
+        // queued after the platform backend's own, since the last one wins.
+        if (click_motion_at >= 0 && frames >= click_motion_at &&
+            frames <= click_motion_at + 1) {
+            io.AddMousePosEvent(718.0f, 501.0f);
+            io.AddMouseButtonEvent(0, frames == click_motion_at);
+        }
+
         ImGui::NewFrame();
+
+        // Drive the appear animation from a known frame, so a mid-flight
+        // sample is at a predictable point in the transition.
+        if (closed_frames > 0) gui.set_open(frames >= closed_frames);
 
         gui.draw(dt);
         // Proof of life (2f): same AddText pipeline the chrome uses.
@@ -170,23 +210,30 @@ int main(int argc, char **argv) {
         glClearColor(0.043f, 0.055f, 0.078f, 1.0f); // #0B0E14
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        glfwSwapBuffers(win);
 
+        // Capture BEFORE the swap: after glfwSwapBuffers the back buffer holds
+        // the previous frame, which would silently offset every measurement by
+        // one frame (harmless for settled shots, wrong for timed ones).
         ++frames;
-        if (mode_once && frames >= 1) done = true;
         if (mode_screenshot && frames >= shot_frames) {
             int fb_w = 0, fb_h = 0;
             glfwGetFramebufferSize(win, &fb_w, &fb_h);
             const bool ok = write_screenshot_png(shot_path, fb_w, fb_h);
             // Machine-checkable evidence: the filters actually narrowed the
-            // list, and the scrolled pane reports a non-zero extent.
+            // list, the scrolled pane reports a non-zero extent, and the
+            // accessibility switch really shortened the animation timing.
             const auto d = gui.diagnostics();
             std::printf("[woketool] png=%s %dx%d visible_cards=%d "
-                        "scroll_max_y=%.1f\n",
+                        "scroll_max_y=%.1f motion_scale=%.2f "
+                        "window_appear=%.3fs\n",
                         ok ? "ok" : "failed", fb_w, fb_h,
-                        d.visible_cards, d.scroll_max_y);
+                        d.visible_cards, d.scroll_max_y,
+                        d.motion_scale, d.window_appear_s);
             done = true;
         }
+
+        glfwSwapBuffers(win);
+        if (mode_once && frames >= 1) done = true;
     }
 
     // -- teardown in reverse init order --
