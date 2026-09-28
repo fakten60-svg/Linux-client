@@ -86,4 +86,25 @@ inline int slugify(const char *src, char *out, int cap) {
     return n;
 }
 
+/// Copy at most `cap - 1` bytes of `src` into the fixed-width field `dst` and
+/// NUL-terminate it, truncating deliberately when `src` does not fit. A null
+/// `src` yields an empty field.
+///
+/// Use this instead of strncpy() wherever the truncation is *intentional*:
+/// strncpy's contract lets the optimizer report a fixed-width copy from a
+/// longer source as a bug at -O2+ (-Wstringop-truncation), and in this project
+/// the truncation is load-bearing — settings.cpp writes exactly what it stored,
+/// so a truncated value round-trips instead of expanding on the next save.
+inline void copy_truncated(char *dst, std::size_t cap, const char *src) {
+    if (dst == nullptr || cap == 0) return;
+    std::size_t n = 0;
+    if (src != nullptr) {
+        while (n + 1 < cap && src[n] != '\0') {
+            dst[n] = src[n];
+            ++n;
+        }
+    }
+    dst[n] = '\0';
+}
+
 } // namespace woke::text

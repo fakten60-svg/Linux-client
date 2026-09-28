@@ -30,9 +30,7 @@ void ClickGui::toast(const char *title, const char *message,
 // --- settings persistence ---------------------------------------------------
 
 void ClickGui::set_config_path(const char *path) {
-    if (path == nullptr) path = "";
-    std::strncpy(config_path_, path, sizeof(config_path_) - 1);
-    config_path_[sizeof(config_path_) - 1] = '\0';
+    text::copy_truncated(config_path_, sizeof(config_path_), path);
 }
 
 void ClickGui::card_key(int index, char *out, int cap) const {

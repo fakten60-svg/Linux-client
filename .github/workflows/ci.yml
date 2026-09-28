@@ -54,6 +54,15 @@ jobs:
             fi
           done
 
+      # The unit suite is dependency-free and headless, so it runs in both
+      # presets: a debug-only pass would miss an optimizer-dependent surprise.
+      - name: Unit tests
+        run: |
+          for preset in linux-debug linux-release; do
+            echo "=== $preset ==="
+            ctest --test-dir "build/$preset" --output-on-failure
+          done
+
       - name: Check exported symbol surface
         run: |
           for preset in linux-debug linux-release; do

@@ -76,12 +76,11 @@ bool SettingsStore::set(const char *key, const char *value) {
 
     // Truncation is intentional and safe: both buffers are fixed, and the
     // writer emits exactly what is stored, so a truncated value survives a
-    // round-trip instead of silently expanding on the next save.
-    std::strncpy(entries_[i].key, key, kKeyLen - 1);
-    entries_[i].key[kKeyLen - 1] = '\0';
-    if (value == nullptr) value = "";
-    std::strncpy(entries_[i].value, value, kValueLen - 1);
-    entries_[i].value[kValueLen - 1] = '\0';
+    // round-trip instead of silently expanding on the next save. See
+    // text::copy_truncated for why this is not strncpy().
+    text::copy_truncated(entries_[i].key, kKeyLen, key);
+    text::copy_truncated(entries_[i].value, kValueLen,
+                         value != nullptr ? value : "");
     return true;
 }
 

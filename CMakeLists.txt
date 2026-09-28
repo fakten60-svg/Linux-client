@@ -99,8 +99,12 @@ add_library(imgui_tool_backends STATIC
 target_link_libraries(imgui_tool_backends PUBLIC imgui glfw)
 
 # --- funchook (Linux function-hooking engine; MinHook-style shim planned) ---
-set(FUNCHOOK_BUILD_SHARED  OFF CACHE BOOL "" FORCE)
-set(FUNCHOOK_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(FUNCHOOK_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+# The vendored option is FUNCHOOK_BUILD_TESTS (plural), and its test tree calls
+# enable_testing() + add_test() unconditionally. Leaving it on registers a ctest
+# entry for a binary EXCLUDE_FROM_ALL never builds, which turns a plain `ctest`
+# run into a failure that has nothing to do with this project.
+set(FUNCHOOK_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
 add_subdirectory(${FUNCHOOK_DIR} funchook EXCLUDE_FROM_ALL)
 
 # --- nlohmann/json (settings & config persistence) --------------------------
@@ -153,6 +157,25 @@ target_link_options(woke PRIVATE
     -Wl,--version-script=${WOKE_ROOT}/src/woke.ld)
 
 # ---------------------------------------------------------------------------
+# woke_ui_core — the parts of src/ui that do not need a GL context
+# ---------------------------------------------------------------------------
+# Split out so the unit tests can link the animation controller and the
+# settings store without dragging ImGui, GLFW or OpenGL in with them. A real
+# target rather than a source list repeated per consumer, so a warning in
+# these files still fails every build that contains them.
+add_library(woke_ui_core STATIC
+    src/ui/animation.cpp
+    src/ui/settings.cpp)
+
+target_include_directories(woke_ui_core PUBLIC ${WOKE_ROOT}/src)
+target_compile_features(woke_ui_core PUBLIC cxx_std_20)
+
+target_compile_options(woke_ui_core PRIVATE
+    -fno-rtti
+    -fvisibility-inlines-hidden
+    -Wall -Wextra -Wpedantic)
+
+# ---------------------------------------------------------------------------
 # woketool — standalone macOS-UI demo/verification app (no injection)
 # ---------------------------------------------------------------------------
 # Renders the same ui/ stack (theme, animation, components, clickgui,
@@ -160,11 +183,9 @@ target_link_options(woke PRIVATE
 # test harness for Phase 5: --screenshot writes a PNG for review.
 add_executable(woketool
     tools/woketool/main.cpp
-    src/ui/animation.cpp
     src/ui/components.cpp
     src/ui/clickgui.cpp
     src/ui/notifications.cpp
-    src/ui/settings.cpp
     src/utils/render_utils.cpp
     src/core/logger.cpp)
 
@@ -181,6 +202,7 @@ target_compile_options(woketool PRIVATE
     -Wno-unused-parameter)
 
 target_link_libraries(woketool PRIVATE
+    woke_ui_core
     imgui
     imgui_tool_backends
     glfw
@@ -206,3 +228,36 @@ set_target_properties(woke PROPERTIES
     OUTPUT_NAME "woke"
     PREFIX      "lib"
     SUFFIX      ".so")
+
+# ---------------------------------------------------------------------------
+# Unit tests — pure/headless logic only, no window and no GPU
+# ---------------------------------------------------------------------------
+# Everything that needs a GL context (components, chrome, toasts) is covered
+# by the woketool screenshot harness instead: a unit test that needs a display
+# is a worse test and a flakier CI job. This suite is dependency-free on
+# purpose, so it runs anywhere the build does.
+option(WOKE_BUILD_TESTS "Build the dependency-free unit test suite" ON)
+
+if(WOKE_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(woke_unit_tests
+        tests/unit/main.cpp
+        tests/unit/test_text.cpp
+        tests/unit/test_math.cpp
+        tests/unit/test_animation.cpp
+        tests/unit/test_settings.cpp)
+
+    target_include_directories(woke_unit_tests PRIVATE ${WOKE_ROOT}/src)
+    target_compile_features(woke_unit_tests PRIVATE cxx_std_20)
+
+    target_compile_options(woke_unit_tests PRIVATE
+        -fno-rtti
+        -fvisibility-inlines-hidden
+        -Wall -Wextra -Wpedantic)
+
+    target_link_libraries(woke_unit_tests PRIVATE woke_ui_core)
+
+    # The test executable is its own oracle: exit 0 = every check passed.
+    add_test(NAME woke.unit COMMAND woke_unit_tests)
+endif()

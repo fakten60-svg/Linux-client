@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "utils/math_utils.h"
+#include "utils/string_utils.h"
 
 namespace woke::ui {
 
@@ -68,8 +69,17 @@ float AnimationController::tween(const char *key, float from, float target,
 
 float AnimationController::damp(const char *key, float target, float smoothing,
                                 float dt) {
+    // `dt` is part of the signature because every call site has one and the
+    // API stays symmetric with tween(), but the integration itself belongs to
+    // update() alone — see the note at the bottom of this function.
+    (void)dt;
+
+    // Whether the channel is new has to be decided BEFORE claiming it: claim()
+    // names the slot it hands back, so "the key is empty" is never true for a
+    // channel that was just created and the check has to be "did it exist".
+    const bool fresh = find(key) < 0;
     Channel &c = claim(key);
-    if (c.key[0] == '\0' && c.value == 0.0f && c.target == 0.0f) {
+    if (fresh) {
         // Fresh channel: start at the target so first-frame reads are sane.
         c.value = target;
     }
@@ -125,8 +135,7 @@ AnimationController::Channel &AnimationController::claim(const char *key) {
         // Truncation-safe copy: keys are short dotted paths ("pill.Fly");
         // strncmp matching above makes a truncated tail still address the
         // same slot.
-        std::strncpy(c.key, key, sizeof(c.key) - 1);
-        c.key[sizeof(c.key) - 1] = '\0';
+        text::copy_truncated(c.key, sizeof(c.key), key);
         return c;
     }
 
@@ -134,8 +143,7 @@ AnimationController::Channel &AnimationController::claim(const char *key) {
     // A reused key means two widgets share one channel — visually a stuck
     // animation, never memory unsafety.
     Channel &oldest = channels_[0];
-    std::strncpy(oldest.key, key, sizeof(oldest.key) - 1);
-    oldest.key[sizeof(oldest.key) - 1] = '\0';
+    text::copy_truncated(oldest.key, sizeof(oldest.key), key);
     oldest.active = false;
     return oldest;
 }
