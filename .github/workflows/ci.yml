@@ -49,7 +49,10 @@ jobs:
             tail -n 3 "$log"
             # Vendored trees are not ours to keep warning-free; everything else
             # is, so any other warning fails the build. Matched on the bare
-            # directory name so a relative path is excluded too.
+            # directory name so a relative path is excluded too. Note the limit:
+            # a warning anchored in a libc inline names "third_party/" nowhere,
+            # so a vendored tree that trips one has to be quieted in CMake
+            # (see the funchook note there) rather than filtered here.
             warnings=$(grep -E "warning:" "$log" | grep -v "third_party/" || true)
             if [ -n "$warnings" ]; then
               # A warning raised inside a libc inline carries its real location

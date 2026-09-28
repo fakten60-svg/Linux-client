@@ -107,6 +107,19 @@ set(FUNCHOOK_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(FUNCHOOK_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
 add_subdirectory(${FUNCHOOK_DIR} funchook EXCLUDE_FROM_ALL)
 
+# Vendored code is not ours to keep warning-free, and this one cannot be
+# attributed to it by path either: with GCC 13 + _FORTIFY_SOURCE,
+# funchook_logv's `vfprintf(fp, fmt, ap)` is diagnosed as a "null format string"
+# inside glibc's vfprintf inline, so the reported location is the system header
+# and not funchook.c. No funchook caller ever passes a null format (the log
+# macros all take a literal), so this is the checker being handed a format it
+# cannot reason about — silence that one check for that one library rather than
+# loosening the project's zero-warning gate, which attributes warnings to a
+# source file and therefore cannot see this one.
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(funchook-static PRIVATE -Wno-format-overflow)
+endif()
+
 # --- nlohmann/json (settings & config persistence) --------------------------
 set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
 add_subdirectory(${NLOHMANN_DIR} nlohmann EXCLUDE_FROM_ALL)
