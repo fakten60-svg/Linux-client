@@ -48,10 +48,15 @@ jobs:
             fi
             tail -n 3 "$log"
             # Vendored trees are not ours to keep warning-free; everything else
-            # is, so any other warning fails the build.
-            warnings=$(grep -E "warning:" "$log" | grep -v "/third_party/" || true)
+            # is, so any other warning fails the build. Matched on the bare
+            # directory name so a relative path is excluded too.
+            warnings=$(grep -E "warning:" "$log" | grep -v "third_party/" || true)
             if [ -n "$warnings" ]; then
-              echo "$warnings"
+              # A warning raised inside a libc inline carries its real location
+              # on the "inlined from" note lines rather than on the warning
+              # line, so print the whole diagnostic — a report without a
+              # file:line cannot be acted on.
+              grep -E -B2 -A8 "warning:" "$log" | grep -v "third_party/"
               echo "::error::$preset build emitted compiler warnings"
               exit 1
             fi
@@ -195,9 +200,11 @@ jobs:
             exit 1
           fi
           tail -n 3 "$log"
-          warnings=$(grep -E "warning:" "$log" | grep -v "/third_party/" || true)
+          warnings=$(grep -E "warning:" "$log" | grep -v "third_party/" || true)
           if [ -n "$warnings" ]; then
-            echo "$warnings"
+            # See the equivalent gate above: the file:line of a warning inside
+            # a libc inline is on the note lines, so dump the diagnostic.
+            grep -E -B2 -A8 "warning:" "$log" | grep -v "third_party/"
             echo "::error::linux-release-asan build emitted compiler warnings"
             exit 1
           fi
