@@ -98,7 +98,12 @@ jobs:
         run: |
           set -euo pipefail
           export LIBGL_ALWAYS_SOFTWARE=1   # llvmpipe everywhere = reproducible pixels
-          run_ui() { xvfb-run -a -s "-screen 0 1280x800x24" "$@"; }
+          # Every invocation must ask for a capture: with no --screenshot/
+          # --verify/--once the tool is the interactive window and would render
+          # until closed. The timeout is the guard for exactly that mistake —
+          # a stalled harness has to fail the job, not idle until the runner
+          # gives up.
+          run_ui() { timeout -s KILL 120 xvfb-run -a -s "-screen 0 1280x800x24" "$@"; }
           shot="build/linux-release/ui-baseline.png"
 
           echo "--- 1. baseline: palette, layout, accessibility ---"
@@ -123,14 +128,15 @@ jobs:
           rm -f /tmp/woke-ui.conf
           run_ui ./build/linux-release/woketool --frames 30 --park-mouse \
             --config /tmp/woke-ui.conf --set card.reduced_motion=1 \
-            --set card.clock=1 | tee /tmp/ui-write.log
+            --set card.clock=1 --verify | tee /tmp/ui-write.log
           grep -q "set_applied=2 of 2" /tmp/ui-write.log
           grep -q "config_save=ok" /tmp/ui-write.log
           grep -q "card.reduced_motion = 1" /tmp/woke-ui.conf
           grep -q "card.clock = 1" /tmp/woke-ui.conf
 
-          # No flags this time: the motion scale and the switch census below can
-          # only come from the file, which is what makes this a restore test.
+          # No switches on the command line this time: the motion scale and the
+          # switch census below can only come from the file, which is what makes
+          # this a restore test rather than a repeat of the write above.
           run_ui ./build/linux-release/woketool --frames 30 --park-mouse \
             --config /tmp/woke-ui.conf --verify | tee /tmp/ui-restore.log
           grep -q "entries=17 applied=17" /tmp/ui-restore.log
@@ -231,7 +237,7 @@ jobs:
           export LIBGL_ALWAYS_SOFTWARE=1
           ASAN_OPTIONS=detect_leaks=0:abort_on_error=1 \
           UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
-          xvfb-run -a -s "-screen 0 1280x800x24" \
+          timeout -s KILL 180 xvfb-run -a -s "-screen 0 1280x800x24" \
             ./build/linux-release-asan/woketool --frames 60 --park-mouse \
             --verify | tee /tmp/ui-asan.log
           # The sanitized build must agree with the release one pixel-for-pixel:
