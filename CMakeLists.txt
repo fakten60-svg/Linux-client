@@ -164,6 +164,7 @@ add_executable(woketool
     src/ui/components.cpp
     src/ui/clickgui.cpp
     src/ui/notifications.cpp
+    src/ui/settings.cpp
     src/utils/render_utils.cpp
     src/core/logger.cpp)
 

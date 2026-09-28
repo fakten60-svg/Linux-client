@@ -100,9 +100,11 @@ public:
           toggle_("card", false) {}
 
     /// `category` is the 1-based sidebar group this card belongs to (0 = unset,
-    /// matched only by the "All" view).
+    /// matched only by the "All" view). `initial_on` is the factory default
+    /// before any settings file is loaded, so a fresh install has a usable
+    /// configuration instead of everything off.
     ModuleCard(const char *title, const char *description, const char *keybind,
-               int category = 0);
+               int category = 0, bool initial_on = false);
 
     /// Draws the card and reports which control the pointer hit. The card row
     /// and its pill share a rect, so the event is disambiguated here.

@@ -22,6 +22,19 @@
 //    --click-motion-at <n>  synthesize a click on the "Reduced Motion" switch
 //                         at frame n, exercising the real click -> state ->
 //                         animation-scale path with no user present
+//    --config <path>      load settings from <path> at startup and write them
+//                         back on exit (also what $WOKE_CONFIG would set).
+//                         Persistence is OFF without it: a screenshot tool
+//                         must not silently rewrite the user's real settings,
+//                         and a persisted file would change the outcome of
+//                         the headless pixel checks run under this harness.
+//    --set <key>=<value>  apply one setting after loading, in the same syntax
+//                         the file uses (e.g. card.reduced_motion=1). Repeatable.
+//    --park-mouse         keep the pointer off the UI. Without an X input
+//                         source the cursor rests at the screen centre, which
+//                         hovers whichever card sits there — harmless for a
+//                         palette check, but it silently pollutes any diff
+//                         between two screenshots.
 // ============================================================================
 
 #include <cstdio>
@@ -75,9 +88,15 @@ bool write_screenshot_png(const char *path, int w, int h) {
 int main(int argc, char **argv) {
     bool        mode_screenshot = false;
     bool        mode_once       = false;
+    bool        park_mouse      = false;
+    // Whether --reduced-motion was actually given: it overrides the loaded
+    // setting, so an absent flag must not "override" it back to off.
     bool        reduced_motion  = false;
     const char *shot_path       = nullptr;
     const char *search_text     = nullptr;
+    const char *config_path     = nullptr;
+    const char *set_kv[16]      = {};
+    int         set_kv_count    = 0;
     int         shot_frames     = 60;
     int         closed_frames   = 0;
     int         click_motion_at = -1;
@@ -97,11 +116,25 @@ int main(int argc, char **argv) {
             fixed_dt = std::atof(argv[++i]);
         } else if (std::strcmp(argv[i], "--click-motion-at") == 0 && i + 1 < argc) {
             click_motion_at = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--config") == 0 && i + 1 < argc) {
+            config_path = argv[++i];
+        } else if (std::strcmp(argv[i], "--set") == 0 && i + 1 < argc) {
+            if (set_kv_count < static_cast<int>(sizeof(set_kv) / sizeof(set_kv[0])))
+                set_kv[set_kv_count++] = argv[++i];
+        } else if (std::strcmp(argv[i], "--park-mouse") == 0) {
+            park_mouse = true;
         } else if (std::strcmp(argv[i], "--reduced-motion") == 0) {
             reduced_motion = true;
         } else if (std::strcmp(argv[i], "--once") == 0) {
             mode_once = true;
         }
+    }
+
+    // Settings file: --config wins, then $WOKE_CONFIG. Nothing else — see the
+    // flag docs at the top of this file for why a harness default is a bad idea.
+    if (config_path == nullptr) {
+        const char *env = std::getenv("WOKE_CONFIG");
+        if (env != nullptr && env[0] != '\0') config_path = env;
     }
 
     woke::log::init();
@@ -159,10 +192,48 @@ int main(int argc, char **argv) {
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     woke::ui::ClickGui gui;
+
+    // Settings are loaded before the command-line flags so the flags act as
+    // overrides of the stored configuration, not the other way round.
+    int config_applied = 0;
+    if (config_path != nullptr) {
+        gui.set_config_path(config_path);
+        config_applied = gui.load_config();
+        std::printf("[woketool] config=%s entries=%d applied=%d\n", config_path,
+                    gui.config_entries(), config_applied);
+    } else {
+        std::printf("[woketool] config=(disabled) entries=0 applied=0\n");
+    }
+
+    int set_applied = 0;
+    for (int i = 0; i < set_kv_count; ++i) {
+        // "key=value", split on the first '=' so values may contain more.
+        const char *eq = std::strchr(set_kv[i], '=');
+        if (eq == nullptr) {
+            std::fprintf(stderr, "[woketool] --set expects key=value: %s\n",
+                         set_kv[i]);
+            continue;
+        }
+        char key[64];
+        const size_t n = static_cast<size_t>(eq - set_kv[i]);
+        const size_t copy = n < sizeof(key) - 1 ? n : sizeof(key) - 1;
+        std::memcpy(key, set_kv[i], copy);
+        key[copy] = '\0';
+        if (gui.set_setting(key, eq + 1)) {
+            ++set_applied;
+        } else {
+            std::fprintf(stderr, "[woketool] --set unknown key: %s\n", key);
+        }
+    }
+    if (set_kv_count > 0)
+        std::printf("[woketool] set_applied=%d of %d\n", set_applied,
+                    set_kv_count);
+
     if (search_text != nullptr) gui.set_search(search_text);
     // Same state a click on the card produces — the switch drives the
-    // animation controller's time scale (see ClickGui::draw).
-    gui.set_reduced_motion(reduced_motion);
+    // animation controller's time scale (see ClickGui::draw). Only when the
+    // flag is present: otherwise the value from the settings file stands.
+    if (reduced_motion) gui.set_reduced_motion(true);
     gui.toast("woke.wtf", "UI online", woke::ui::notifications::Kind::kSuccess);
 
     double last = glfwGetTime();
@@ -179,6 +250,11 @@ int main(int argc, char **argv) {
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
+
+        // Park the pointer outside the window (8,8 is in the app background,
+        // left of the ImGui window at x=60) so no card renders its hover
+        // state. Queued before the click below so a synthetic click still wins.
+        if (park_mouse) io.AddMousePosEvent(8.0f, 8.0f);
 
         // Synthetic click on the "Reduced Motion" pill (the 6th card, right-
         // hand switch). The position is fed one frame early so ImGui sees a
@@ -198,6 +274,17 @@ int main(int argc, char **argv) {
         if (closed_frames > 0) gui.set_open(frames >= closed_frames);
 
         gui.draw(dt);
+
+        // Autosave: the "Config Autosave" switch decides whether a change
+        // hits the disk immediately or only on exit. Printed so the two paths
+        // are distinguishable in a headless run (the exit save happens either
+        // way, so without this line the switch would be unobservable).
+        if (gui.config_dirty() && gui.autosave_enabled()) {
+            const bool ok = gui.save_config();
+            std::printf("[woketool] autosave=%s entries=%d\n",
+                        ok ? "ok" : "failed", gui.config_entries());
+        }
+
         // Proof of life (2f): same AddText pipeline the chrome uses.
         ImGui::GetForegroundDrawList()->AddText(
             ImVec2(20, 20), woke::theme::color::text_bright,
@@ -225,15 +312,25 @@ int main(int argc, char **argv) {
             const auto d = gui.diagnostics();
             std::printf("[woketool] png=%s %dx%d visible_cards=%d "
                         "scroll_max_y=%.1f motion_scale=%.2f "
-                        "window_appear=%.3fs\n",
+                        "window_appear=%.3fs enabled_cards=%d\n",
                         ok ? "ok" : "failed", fb_w, fb_h,
                         d.visible_cards, d.scroll_max_y,
-                        d.motion_scale, d.window_appear_s);
+                        d.motion_scale, d.window_appear_s, d.enabled_cards);
             done = true;
         }
 
         glfwSwapBuffers(win);
         if (mode_once && frames >= 1) done = true;
+    }
+
+    // Save-on-exit: covers the autosave-off case, and means "point the tool at
+    // a file" always leaves that file holding the live state. Skipped entirely
+    // when no path was given.
+    if (gui.config_enabled()) {
+        const bool ok = gui.save_config();
+        std::printf("[woketool] config_save=%s path=%s entries=%d\n",
+                    ok ? "ok" : "failed", gui.config_path(),
+                    gui.config_entries());
     }
 
     // -- teardown in reverse init order --

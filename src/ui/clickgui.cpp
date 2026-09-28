@@ -9,6 +9,8 @@
 #include "ui/clickgui.h"
 
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include "ui/animation.h"
 #include "ui/theme.h"
@@ -23,6 +25,101 @@ ClickGui::ClickGui() = default;
 void ClickGui::toast(const char *title, const char *message,
                      notifications::Kind kind) {
     toasts_.push(title, message, kind);
+}
+
+// --- settings persistence ---------------------------------------------------
+
+void ClickGui::set_config_path(const char *path) {
+    if (path == nullptr) path = "";
+    std::strncpy(config_path_, path, sizeof(config_path_) - 1);
+    config_path_[sizeof(config_path_) - 1] = '\0';
+}
+
+void ClickGui::card_key(int index, char *out, int cap) const {
+    // Titles are the human-facing name and also the identity of a card
+    // everywhere else (animation channels), so the settings key is derived
+    // from them rather than from the array position: reordering cards must not
+    // silently reinterpret an existing file.
+    char slug[40];
+    text::slugify(cards_[index].title(), slug, static_cast<int>(sizeof(slug)));
+    std::snprintf(out, static_cast<size_t>(cap), "card.%s", slug);
+}
+
+bool ClickGui::apply_setting(const char *key, const char *value) {
+    if (key == nullptr) return false;
+
+    if (std::strcmp(key, "ui.category") == 0) {
+        const int idx = std::atoi(value);
+        if (idx < 0 || idx >= kMaxCats) return false;
+        for (int k = 0; k < kMaxCats; ++k)
+            categories_[k].set_selected(k == idx);
+        active_category_ = idx;
+        return true;
+    }
+
+    if (std::strncmp(key, "card.", 5) == 0) {
+        char candidate[48];
+        for (int i = 0; i < card_count_; ++i) {
+            card_key(i, candidate, static_cast<int>(sizeof(candidate)));
+            if (std::strcmp(candidate, key) != 0) continue;
+            // Round-trip through the store so "card.x = on" is parsed by the
+            // same boolean rules a hand-edited file gets.
+            config_.set(key, value);
+            cards_[i].set_on(config_.get_bool(key, false));
+            return true;
+        }
+    }
+
+    return false;
+}
+
+int ClickGui::load_config() {
+    if (!config_enabled()) return 0;
+
+    config_.clear();
+    // Missing file (first run) leaves the store empty and the factory defaults
+    // in place — that is the normal path, not a failure to report.
+    if (!config_.load(config_path_)) return 0;
+
+    int applied = 0;
+    for (int i = 0; i < config_.count(); ++i)
+        if (apply_setting(config_.entry(i).key, config_.entry(i).value))
+            ++applied;
+
+    config_dirty_ = false;
+    return applied;
+}
+
+void ClickGui::refresh_settings() {
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%d", active_category_);
+    config_.set("ui.category", buf);
+
+    char key[48];
+    for (int i = 0; i < card_count_; ++i) {
+        card_key(i, key, static_cast<int>(sizeof(key)));
+        config_.set_bool(key, cards_[i].is_on());
+    }
+}
+
+bool ClickGui::save_config() {
+    if (!config_enabled()) return false;
+
+    // Write the whole live state, not just what changed: the file then always
+    // describes the current configuration, and unknown keys loaded from a
+    // newer build survive because they are still in the store.
+    refresh_settings();
+    const bool ok = config_.save(config_path_);
+    if (ok) config_dirty_ = false;
+    return ok;
+}
+
+bool ClickGui::set_setting(const char *key, const char *value) {
+    if (!apply_setting(key, value)) return false;
+    // A programmatic edit is a user-visible change like any other: it must be
+    // written back, whether that happens now (autosave) or on exit.
+    config_dirty_ = true;
+    return true;
 }
 
 // --- filtering --------------------------------------------------------------
@@ -56,6 +153,13 @@ void ClickGui::draw(float dt) {
                                             : 1.0f);
     diag_.motion_scale    = anim_.motion_scale();
     diag_.window_appear_s = anim_.scaled(theme::time::window_appear);
+
+    // Whole-list switch census (independent of the filters): the harness reads
+    // it to prove a settings file actually restored state across processes.
+    int on = 0;
+    for (int i = 0; i < card_count_; ++i)
+        if (!cards_[i].empty() && cards_[i].is_on()) ++on;
+    diag_.enabled_cards = on;
 
     // -- window open/close animation --
     // macOS sheets cross-fade on appear (ease_in_out_quart here, the curve the
@@ -224,6 +328,7 @@ void ClickGui::draw_sidebar(ImVec2 win_min, ImVec2 win_max, float dt) {
             for (int k = 0; k < kMaxCats; ++k)
                 categories_[k].set_selected(k == i);
             active_category_ = i;
+            config_dirty_    = true; // the active group is a persisted setting
             // The card pane is a scrolled list; a group switch that left the
             // scroll offset behind would open mid-list. Reset to the top.
             scroll_reset_ = true;
@@ -272,6 +377,7 @@ void ClickGui::draw_cards(ImVec2 win_min, ImVec2 win_max, float dt) {
         switch (ev) {
         case CardEvent::kToggleChanged: {
             const bool on = cards_[i].is_on();
+            config_dirty_ = true; // every switch is a persisted setting
             // The accessibility switch reports what it actually did to the UI
             // rather than a generic on/off, so the change is visible in the
             // window itself as well as in the toast.
