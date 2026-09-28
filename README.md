@@ -60,6 +60,24 @@ tar -xzf /tmp/cmake.tar.gz -C ~/.local --strip-components=1   # → ~/.local/bin
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
+### Unit tests
+
+```sh
+ctest --test-dir build/linux-release --output-on-failure
+# → 1/1 Test #1: woke.unit ... Passed
+# → OK — 900+ checks, 0 failures
+```
+
+`woke_unit_tests` (`tests/unit/`) covers the pure, headless layers: `utils/math_utils.h`,
+`utils/string_utils.h`, `ui/settings.*` and `ui/animation.*`. It has **no test framework and
+no display requirement** — `tests/unit/test_util.h` is a ~70-line assertion context — so it
+runs anywhere the build does and is part of CI for both presets. The executable's exit code
+is the contract (0 = all checks passed), so nothing parses its output.
+
+Anything that needs a GL context (components, chrome, toasts) is verified by the `woketool`
+screenshot harness instead: a unit test that needs a window is a worse test and a flakier CI
+job. `-DWOKE_BUILD_TESTS=OFF` drops the target and the ctest entry.
+
 ### Build Options
 
 | Preset | Purpose |
@@ -68,7 +86,8 @@ export PATH="$HOME/.local/bin:$PATH"
 | `linux-release` | `-O3`, LTO, hidden symbol visibility — the injection artifact |
 | `linux-release-asan` | Release + ASan/UBSan for development sessions (never ship) |
 
-Additional CMake switches: `-DWOKE_ENABLE_SANITIZERS=ON`, `-DWOKE_ENABLE_LTO=ON|OFF`.
+Additional CMake switches: `-DWOKE_ENABLE_SANITIZERS=ON`, `-DWOKE_ENABLE_LTO=ON|OFF`,
+`-DWOKE_BUILD_TESTS=ON|OFF`.
 
 ## Project Layout
 
@@ -102,8 +121,17 @@ Additional CMake switches: `-DWOKE_ENABLE_SANITIZERS=ON`, `-DWOKE_ENABLE_LTO=ON|
 │   └── woke.ld               # version script: only JNI_OnLoad/OnUnLoad export
 ├── tools/woketool/           # standalone GLFW+GL3 app rendering the ui/ stack
 │   └── main.cpp              #   --screenshot/--frames/--search/--config/--set flags
+├── tests/unit/               # dependency-free unit suite (ctest, no display needed)
+│   ├── test_util.h           #   ~70-line assertion context — the whole harness
+│   └── test_{text,math,animation,settings}.cpp
 ├── tests/jvm/                # live-JVM verification harness (stubs + probe)
 └── logs/                     # runtime session logs (gitignored)
+```
+
+`CMakeLists.txt` builds four targets: `woke` (the injectable `libwoke.so`), `woke_ui_core`
+(the parts of `src/ui` with no GL dependency — shared by `woketool` and the unit tests, so
+their source list is not duplicated per consumer), `woketool` (the standalone harness) and
+`woke_unit_tests`.
 
 ### macOS UI harness (woketool)
 
@@ -216,6 +244,8 @@ interface-settings mock data — no gameplay modules.
   no `FindClass` / `GetMethodID` inside execution loops.
 - Rendering overhead budget: **< 0.5 ms per frame**; ImGui work fully suppressed
   when the ClickGUI is closed.
+- Logic that can be tested without a display is tested without a display; a new
+  pure helper lands with unit coverage in the same change.
 
 ## Status
 
@@ -230,6 +260,10 @@ interface-settings mock data — no gameplay modules.
       Reduced Motion switch that rescales every animation, and settings
       persistence, all verified via the standalone `woketool` harness
       (injection-side graphics hooks intentionally not pursued)
+- [x] Testing — dependency-free unit suite over the pure layers (text helpers,
+      animation math, settings store, animation controller), run by `ctest` in
+      both presets on every CI build; GL-level behaviour stays covered by the
+      `woketool` screenshot harness
 
 ### Mappings
 

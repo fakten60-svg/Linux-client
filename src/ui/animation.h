@@ -61,7 +61,10 @@ public:
     /// seconds with ease_in_out_quart. Returns the channel's current value.
     float tween(const char *key, float from, float target, float duration);
 
-    /// Exponential smoothing toward `target`. Returns the current value.
+    /// Exponential smoothing toward `target`. Returns the current value. A
+    /// channel created by this call starts *at* `target`, so the first frame a
+    /// widget exists it already reads its real state instead of fading in from
+    /// zero. Stepping happens in update() only.
     float damp(const char *key, float target, float smoothing, float dt);
 
     /// Read a channel without advancing it; inactive channels read as `target`.
