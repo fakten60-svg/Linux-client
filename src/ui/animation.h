@@ -45,6 +45,18 @@ public:
     /// Advance all active channels. Call once per frame before rendering.
     void update(float dt);
 
+    /// Global accessibility factor for every animation in the UI. 1.0 = as
+    /// designed; theme::time::reduced_motion_scale = "Reduce Motion". Applied
+    /// to tween durations and damp smoothing, so callers keep writing the
+    /// designed values from theme.h and the user's preference is honoured in
+    /// one place. Consumers that animate *distance* outside this class (the
+    /// toast slide) read motion_scale() to shorten their travel to match.
+    void  set_motion_scale(float scale);
+    float motion_scale() const { return motion_scale_; }
+
+    /// `seconds` compressed by the current motion scale.
+    float scaled(float seconds) const { return seconds * motion_scale_; }
+
     /// Timed animation: value walks from `from` to `target` over `duration`
     /// seconds with ease_in_out_quart. Returns the channel's current value.
     float tween(const char *key, float from, float target, float duration);
@@ -67,6 +79,7 @@ private:
     static constexpr size_t kNotFound = static_cast<size_t>(-1);
     Channel channels_[kMaxChannels] = {};
     size_t  count_ = 0;
+    float   motion_scale_ = 1.0f;
 
     int find(const char *key) const;
     Channel &claim(const char *key);

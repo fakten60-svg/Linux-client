@@ -104,6 +104,13 @@ constexpr float fade             = 0.150f; // card hover cross-fade
 constexpr float window_appear    = 0.220f; // window scale/fade-in (ease_out_cubic)
 constexpr float toast_slide      = 0.260f; // toast enter/exit
 constexpr float toast_hold       = 3.500f; // visible duration before exit slide
+
+/// "Reduced Motion" (System Settings > Accessibility) keeps the *shape* of a
+/// transition but compresses it to about a third, so the UI still reads as
+/// animated without the travel that triggers vestibular discomfort. Applied to
+/// every tween duration, damp smoothing and toast displacement at once by
+/// AnimationController::set_motion_scale().
+constexpr float reduced_motion_scale = 0.35f;
 } // namespace time
 
 /// Hover = brightness-lerp up, press = darken 15% (spec). Computed from the

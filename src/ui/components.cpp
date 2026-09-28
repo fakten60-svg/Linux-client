@@ -7,9 +7,6 @@
 
 #include "ui/components.h"
 
-#include <cstdio>
-#include <cstring>
-
 #include "ui/animation.h"
 #include "ui/theme.h"
 #include "utils/math_utils.h"
@@ -19,7 +16,19 @@ namespace woke::ui {
 
 // --- BaseUIComponent --------------------------------------------------------
 
-BaseUIComponent::BaseUIComponent(const char *id) : id_(id) {}
+BaseUIComponent::BaseUIComponent(const char *prefix, const char *id) {
+    // "prefix.id" into the fixed key buffer, truncated rather than overflowed.
+    // Done once, at construction — draw() only ever reads key().
+    size_t n = 0;
+    const auto append = [&n, this](const char *s) {
+        for (; s != nullptr && *s != '\0' && n + 1 < sizeof(key_); ++s)
+            key_[n++] = *s;
+    };
+    append(prefix);
+    append(".");
+    append(id);
+    key_[n] = '\0';
+}
 
 bool BaseUIComponent::tick(ImVec2 min, ImVec2 max, bool enabled) {
     if (!enabled) {
@@ -43,18 +52,18 @@ bool BaseUIComponent::tick(ImVec2 min, ImVec2 max, bool enabled) {
 
 PillToggle::State PillToggle::draw(AnimationController &anim, ImVec2 min,
                                    ImVec2 max, float dt, bool enabled) {
-    // Channel key: built per-frame into a stack buffer; the controller
-    // copies keys on claim, so a stack buffer is safe here.
-    char key_t[24];
-    std::snprintf(key_t, sizeof(key_t), "pt.%s", id_);
+    const char *key_t = key();
 
     const bool clicked = tick(min, max, enabled);
     if (clicked) state_on_ = !state_on_;
 
     // Retarget + advance through the shared controller (ease_in_out_quart,
-    // theme::time::knob = 180ms — Apple's NSSwitch cadence).
+    // theme::time::knob = 180ms — Apple's NSSwitch cadence, shortened by the
+    // controller's motion scale).
+    // An absent channel reads as *off*, not as the target: seeding it with the
+    // target would make the first flip an instant jump with no knob travel.
     const float target = state_on_ ? 1.0f : 0.0f;
-    float t = anim.value(key_t, target); // settled channels read as target
+    float t = anim.value(key_t, 0.0f);
     if (t != target) t = anim.tween(key_t, t, target, theme::time::knob);
 
     // -- track --
@@ -87,23 +96,32 @@ PillToggle::State PillToggle::draw(AnimationController &anim, ImVec2 min,
 // --- ModuleCard -------------------------------------------------------------
 
 ModuleCard::ModuleCard(const char *title, const char *description,
-                       const char *keybind)
-    : BaseUIComponent(title), title_(title), description_(description),
-      keybind_(keybind), toggle_(title, false) {}
+                       const char *keybind, int category)
+    : BaseUIComponent("mc", title), title_(title), description_(description),
+      keybind_(keybind), category_(category), toggle_(title, false) {}
 
-bool ModuleCard::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
-                      float dt) {
-    if (title_ == nullptr) return false; // spare array slot — draw nothing
+CardEvent ModuleCard::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
+                           float dt) {
+    if (title_ == nullptr) return CardEvent::kNone; // spare slot — draw nothing
 
     ImDrawList *dl = ImGui::GetWindowDrawList();
 
-    char key_h[24];
-    std::snprintf(key_h, sizeof(key_h), "mc.%s", id_);
+    // The pill rect is known before hit-testing, and it is exactly what
+    // disambiguates a row click from a switch click: both rects overlap, so
+    // without this one press would toggle the switch AND report a row click.
+    const float  pad = theme::metric::card_padding;
+    const float  pw  = theme::metric::pill_w;
+    const float  ph  = theme::metric::pill_h;
+    const ImVec2 pmin(max.x - pad - pw, (min.y + max.y) * 0.5f - ph * 0.5f);
+    const ImVec2 pmax(pmin.x + pw, pmin.y + ph);
 
     // Card hover — exponential smoothing (Apple hover semantics, ~50ms to
-    // 87%): rows must feel instant, not springy.
-    const bool  clicked = tick(min, max);
-    const float hov     = anim.damp(key_h, hovered_ ? 1.0f : 0.0f, 0.05f, dt);
+    // 87%): rows must feel instant, not springy. Hover still covers the whole
+    // row (macOS highlights the row while the pointer is over the switch).
+    const bool   row_clicked = tick(min, max);
+    const ImVec2 mp          = ImGui::GetIO().MousePos;
+    const bool   on_switch   = mp.x >= pmin.x - 2.0f && mp.x <= pmax.x + 2.0f;
+    const float  hov = anim.damp(key(), hovered_ ? 1.0f : 0.0f, 0.05f, dt);
 
     // Hover shifts the card one lightness step up (macOS row-hover), never
     // toward accent color — accent is reserved for selection and state.
@@ -113,7 +131,6 @@ bool ModuleCard::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
                          theme::metric::card_rounding);
 
     // -- text block --
-    const float pad    = theme::metric::card_padding;
     const float col_x  = min.x + pad;
     const float col_w  = (max.x - min.x) - pad * 2.0f - 96.0f;
     float       y      = min.y + 11.0f;
@@ -135,34 +152,28 @@ bool ModuleCard::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
         const ImVec2 bmin(cx, (min.y + max.y) * 0.5f - bh * 0.5f);
         const ImVec2 bmax(bmin.x + bw, bmin.y + bh);
         render::rounded_rect(dl, bmin, bmax, 0, theme::color::card_stroke, 4.0f);
-        dl->AddText(ImVec2(bmin.x + 6.0f, bmin.y + (bh - ts.y) * 0.5f),
-                    theme::color::text_muted, keybind_);
+        render::text(dl, ImVec2(bmin.x + 6.0f, bmin.y + (bh - ts.y) * 0.5f),
+                     theme::color::text_muted, keybind_);
     }
 
     // -- pill --
-    const float pw  = theme::metric::pill_w;
-    const float ph  = theme::metric::pill_h;
-    const ImVec2 pmin(max.x - pad - pw, (min.y + max.y) * 0.5f - ph * 0.5f);
-    const ImVec2 pmax(pmin.x + pw, pmin.y + ph);
+    const bool was_on = toggle_.is_on();
     toggle_.draw(anim, pmin, pmax, dt);
 
-    return clicked;
+    if (toggle_.is_on() != was_on) return CardEvent::kToggleChanged;
+    if (row_clicked && !on_switch) return CardEvent::kBodyClicked;
+    return CardEvent::kNone;
 }
 
 // --- CategoryItem -----------------------------------------------------------
-
-CategoryItem::CategoryItem(const char *label, bool selected)
-    : BaseUIComponent(label), label_(label), selected_(selected) {}
 
 bool CategoryItem::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
                         float dt) {
     ImDrawList *dl = ImGui::GetWindowDrawList();
     const bool clicked = tick(min, max);
 
-    char key_h[24];
-    std::snprintf(key_h, sizeof(key_h), "ci.%s", id_);
     const float target = (hovered_ || selected_) ? 1.0f : 0.0f;
-    const float hov    = anim.damp(key_h, target, 0.05f, dt);
+    const float hov    = anim.damp(key(), target, 0.05f, dt);
 
     // Selection = 14% Apple Blue wash; hover alone is a neutral lift. The
     // distinction matters: selection is state, hover is only attention.
@@ -173,19 +184,28 @@ bool CategoryItem::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
     // Accent bar: 3px rounded, fades with the same channel so it never pops.
     const ImU32 bar = theme::blend(0, theme::color::apple_blue, hov);
     if ((bar & IM_COL32_A_MASK) != 0)
-        dl->AddRectFilled(ImVec2(min.x, min.y + 4.0f),
-                          ImVec2(min.x + 3.0f, max.y - 4.0f), bar, 1.5f);
+        render::rounded_rect(dl, ImVec2(min.x, min.y + 4.0f),
+                             ImVec2(min.x + 3.0f, max.y - 4.0f), bar, 0, 1.5f);
 
     const float th = ImGui::GetTextLineHeight();
-    dl->AddText(ImVec2(min.x + 12.0f, (min.y + max.y - th) * 0.5f),
-                selected_ ? theme::color::text_primary : theme::color::text_muted,
-                label_);
+    render::text(dl, ImVec2(min.x + 12.0f, (min.y + max.y - th) * 0.5f),
+                 selected_ ? theme::color::text_primary
+                           : theme::color::text_muted,
+                 label_);
     return clicked;
 }
 
 // --- SearchBar --------------------------------------------------------------
 
-SearchBar::SearchBar() : BaseUIComponent("search") {}
+SearchBar::SearchBar() : BaseUIComponent("sb", "search") {}
+
+void SearchBar::set_text(const char *text) {
+    size_t n = 0;
+    if (text != nullptr) {
+        for (; text[n] != '\0' && n + 1 < sizeof(buf_); ++n) buf_[n] = text[n];
+    }
+    buf_[n] = '\0';
+}
 
 bool SearchBar::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
                      float dt) {
@@ -201,8 +221,9 @@ bool SearchBar::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
     const float cy = (min.y + max.y) * 0.5f;
     render::circle(dl, ImVec2(min.x + 14.0f, cy - 1.0f), 4.0f, 0,
                    theme::color::text_muted, 1.3f);
-    dl->AddLine(ImVec2(min.x + 17.0f, cy + 2.0f),
-                ImVec2(min.x + 19.5f, cy + 4.5f), theme::color::text_muted, 1.3f);
+    render::line(dl, ImVec2(min.x + 17.0f, cy + 2.0f),
+                 ImVec2(min.x + 19.5f, cy + 4.5f),
+                 theme::color::text_muted, 1.3f);
 
     // Input region — an ImGui input whose frame we drew ourselves.
     ImGui::SetCursorScreenPos(ImVec2(min.x + 26.0f, min.y + 4.0f));

@@ -41,6 +41,16 @@ void AnimationController::update(float dt) {
     }
 }
 
+void AnimationController::set_motion_scale(float scale) {
+    // Clamped rather than validated-and-rejected: a nonsense value from a
+    // config file should degrade to "very fast", never to a divide-by-zero or
+    // a frozen UI. Above 1.0 is not a supported mode (slow-motion debugging
+    // would belong behind its own switch).
+    if (scale < 0.05f) scale = 0.05f;
+    if (scale > 1.0f)  scale = 1.0f;
+    motion_scale_ = scale;
+}
+
 float AnimationController::tween(const char *key, float from, float target,
                                  float duration) {
     Channel &c = claim(key);
@@ -50,7 +60,7 @@ float AnimationController::tween(const char *key, float from, float target,
     c.mode      = Mode::kTween;
     c.from      = from;
     c.target    = target;
-    c.duration  = duration;
+    c.duration  = scaled(duration);
     c.elapsed   = 0.0f;
     c.active    = true;
     return c.value = from;
@@ -65,7 +75,7 @@ float AnimationController::damp(const char *key, float target, float smoothing,
     }
     c.mode      = Mode::kDamp;
     c.target    = target;
-    c.smoothing = smoothing;
+    c.smoothing = scaled(smoothing);
     c.active    = true;
     // Stepping happens exclusively in update(dt) — stepping here too would
     // integrate dt twice and make hover speeds depend on call order.
