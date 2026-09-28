@@ -7,9 +7,6 @@
 
 #include "ui/components.h"
 
-#include <cstdio>
-#include <cstring>
-
 #include "ui/animation.h"
 #include "ui/theme.h"
 #include "utils/math_utils.h"
@@ -19,7 +16,19 @@ namespace woke::ui {
 
 // --- BaseUIComponent --------------------------------------------------------
 
-BaseUIComponent::BaseUIComponent(const char *id) : id_(id) {}
+BaseUIComponent::BaseUIComponent(const char *prefix, const char *id) {
+    // "prefix.id" into the fixed key buffer, truncated rather than overflowed.
+    // Done once, at construction — draw() only ever reads key().
+    size_t n = 0;
+    const auto append = [&n, this](const char *s) {
+        for (; s != nullptr && *s != '\0' && n + 1 < sizeof(key_); ++s)
+            key_[n++] = *s;
+    };
+    append(prefix);
+    append(".");
+    append(id);
+    key_[n] = '\0';
+}
 
 bool BaseUIComponent::tick(ImVec2 min, ImVec2 max, bool enabled) {
     if (!enabled) {
@@ -43,10 +52,7 @@ bool BaseUIComponent::tick(ImVec2 min, ImVec2 max, bool enabled) {
 
 PillToggle::State PillToggle::draw(AnimationController &anim, ImVec2 min,
                                    ImVec2 max, float dt, bool enabled) {
-    // Channel key: built per-frame into a stack buffer; the controller
-    // copies keys on claim, so a stack buffer is safe here.
-    char key_t[24];
-    std::snprintf(key_t, sizeof(key_t), "pt.%s", id_);
+    const char *key_t = key();
 
     const bool clicked = tick(min, max, enabled);
     if (clicked) state_on_ = !state_on_;
@@ -87,23 +93,32 @@ PillToggle::State PillToggle::draw(AnimationController &anim, ImVec2 min,
 // --- ModuleCard -------------------------------------------------------------
 
 ModuleCard::ModuleCard(const char *title, const char *description,
-                       const char *keybind)
-    : BaseUIComponent(title), title_(title), description_(description),
-      keybind_(keybind), toggle_(title, false) {}
+                       const char *keybind, int category)
+    : BaseUIComponent("mc", title), title_(title), description_(description),
+      keybind_(keybind), category_(category), toggle_(title, false) {}
 
-bool ModuleCard::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
-                      float dt) {
-    if (title_ == nullptr) return false; // spare array slot — draw nothing
+CardEvent ModuleCard::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
+                           float dt) {
+    if (title_ == nullptr) return CardEvent::kNone; // spare slot — draw nothing
 
     ImDrawList *dl = ImGui::GetWindowDrawList();
 
-    char key_h[24];
-    std::snprintf(key_h, sizeof(key_h), "mc.%s", id_);
+    // The pill rect is known before hit-testing, and it is exactly what
+    // disambiguates a row click from a switch click: both rects overlap, so
+    // without this one press would toggle the switch AND report a row click.
+    const float  pad = theme::metric::card_padding;
+    const float  pw  = theme::metric::pill_w;
+    const float  ph  = theme::metric::pill_h;
+    const ImVec2 pmin(max.x - pad - pw, (min.y + max.y) * 0.5f - ph * 0.5f);
+    const ImVec2 pmax(pmin.x + pw, pmin.y + ph);
 
     // Card hover — exponential smoothing (Apple hover semantics, ~50ms to
-    // 87%): rows must feel instant, not springy.
-    const bool  clicked = tick(min, max);
-    const float hov     = anim.damp(key_h, hovered_ ? 1.0f : 0.0f, 0.05f, dt);
+    // 87%): rows must feel instant, not springy. Hover still covers the whole
+    // row (macOS highlights the row while the pointer is over the switch).
+    const bool   row_clicked = tick(min, max);
+    const ImVec2 mp          = ImGui::GetIO().MousePos;
+    const bool   on_switch   = mp.x >= pmin.x - 2.0f && mp.x <= pmax.x + 2.0f;
+    const float  hov = anim.damp(key(), hovered_ ? 1.0f : 0.0f, 0.05f, dt);
 
     // Hover shifts the card one lightness step up (macOS row-hover), never
     // toward accent color — accent is reserved for selection and state.
@@ -113,7 +128,6 @@ bool ModuleCard::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
                          theme::metric::card_rounding);
 
     // -- text block --
-    const float pad    = theme::metric::card_padding;
     const float col_x  = min.x + pad;
     const float col_w  = (max.x - min.x) - pad * 2.0f - 96.0f;
     float       y      = min.y + 11.0f;
@@ -140,29 +154,23 @@ bool ModuleCard::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
     }
 
     // -- pill --
-    const float pw  = theme::metric::pill_w;
-    const float ph  = theme::metric::pill_h;
-    const ImVec2 pmin(max.x - pad - pw, (min.y + max.y) * 0.5f - ph * 0.5f);
-    const ImVec2 pmax(pmin.x + pw, pmin.y + ph);
+    const bool was_on = toggle_.is_on();
     toggle_.draw(anim, pmin, pmax, dt);
 
-    return clicked;
+    if (toggle_.is_on() != was_on) return CardEvent::kToggleChanged;
+    if (row_clicked && !on_switch) return CardEvent::kBodyClicked;
+    return CardEvent::kNone;
 }
 
 // --- CategoryItem -----------------------------------------------------------
-
-CategoryItem::CategoryItem(const char *label, bool selected)
-    : BaseUIComponent(label), label_(label), selected_(selected) {}
 
 bool CategoryItem::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
                         float dt) {
     ImDrawList *dl = ImGui::GetWindowDrawList();
     const bool clicked = tick(min, max);
 
-    char key_h[24];
-    std::snprintf(key_h, sizeof(key_h), "ci.%s", id_);
     const float target = (hovered_ || selected_) ? 1.0f : 0.0f;
-    const float hov    = anim.damp(key_h, target, 0.05f, dt);
+    const float hov    = anim.damp(key(), target, 0.05f, dt);
 
     // Selection = 14% Apple Blue wash; hover alone is a neutral lift. The
     // distinction matters: selection is state, hover is only attention.
@@ -185,7 +193,15 @@ bool CategoryItem::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
 
 // --- SearchBar --------------------------------------------------------------
 
-SearchBar::SearchBar() : BaseUIComponent("search") {}
+SearchBar::SearchBar() : BaseUIComponent("sb", "search") {}
+
+void SearchBar::set_text(const char *text) {
+    size_t n = 0;
+    if (text != nullptr) {
+        for (; text[n] != '\0' && n + 1 < sizeof(buf_); ++n) buf_[n] = text[n];
+    }
+    buf_[n] = '\0';
+}
 
 bool SearchBar::draw(AnimationController &anim, ImVec2 min, ImVec2 max,
                      float dt) {

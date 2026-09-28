@@ -12,6 +12,8 @@
 //    --screenshot <path>  render --frames frames, save a PNG, exit 0
 //    --frames <n>         frame count for screenshot mode (default 60)
 //    --once               render one frame and exit (CI smoke test)
+//    --search <text>      pre-fill the search field, so a filtered list can be
+//                         verified headlessly
 // ============================================================================
 
 #include <cstdio>
@@ -66,6 +68,7 @@ int main(int argc, char **argv) {
     bool        mode_screenshot = false;
     bool        mode_once       = false;
     const char *shot_path       = nullptr;
+    const char *search_text     = nullptr;
     int         shot_frames     = 60;
 
     for (int i = 1; i < argc; ++i) {
@@ -74,6 +77,8 @@ int main(int argc, char **argv) {
             shot_path = argv[++i];
         } else if (std::strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
             shot_frames = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--search") == 0 && i + 1 < argc) {
+            search_text = argv[++i];
         } else if (std::strcmp(argv[i], "--once") == 0) {
             mode_once = true;
         }
@@ -134,6 +139,7 @@ int main(int argc, char **argv) {
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     woke::ui::ClickGui gui;
+    if (search_text != nullptr) gui.set_search(search_text);
     gui.toast("woke.wtf", "UI online", woke::ui::notifications::Kind::kSuccess);
 
     double last = glfwGetTime();
@@ -171,7 +177,14 @@ int main(int argc, char **argv) {
         if (mode_screenshot && frames >= shot_frames) {
             int fb_w = 0, fb_h = 0;
             glfwGetFramebufferSize(win, &fb_w, &fb_h);
-            write_screenshot_png(shot_path, fb_w, fb_h);
+            const bool ok = write_screenshot_png(shot_path, fb_w, fb_h);
+            // Machine-checkable evidence: the filters actually narrowed the
+            // list, and the scrolled pane reports a non-zero extent.
+            const auto d = gui.diagnostics();
+            std::printf("[woketool] png=%s %dx%d visible_cards=%d "
+                        "scroll_max_y=%.1f\n",
+                        ok ? "ok" : "failed", fb_w, fb_h,
+                        d.visible_cards, d.scroll_max_y);
             done = true;
         }
     }

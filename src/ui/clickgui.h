@@ -3,12 +3,13 @@
 //
 //  The main macOS-style window: title bar with traffic lights, sidebar with
 //  categories + search, and a scrolling card list (spec 2h). Owns the
-//  AnimationController, the demo cards, and the toast queue so a single
+//  AnimationController, the card data, and the toast queue so a single
 //  call site (the app shell) drives everything.
 //
 //  NOTE ON DEMO CONTENT: the cards below are plain UI/settings mock data
 //  (interface toggles, HUD options) — deliberately NOT gameplay modules.
-//  They exist to exercise PillToggle/ModuleCard rendering states only.
+//  They exist to exercise PillToggle/ModuleCard rendering states and the
+//  sidebar filter/search paths.
 // ============================================================================
 
 #pragma once
@@ -23,8 +24,10 @@ namespace woke::ui {
 
 class ClickGui {
 public:
-    static constexpr int kMaxCards  = 24;
-    static constexpr int kMaxCats   = 4;
+    static constexpr int kMaxCards = 24;
+    /// Sidebar entries: index 0 is the "All" pseudo-category, 1..N-1 are the
+    /// real groups a ModuleCard can belong to.
+    static constexpr int kMaxCats  = 5;
 
     ClickGui();
 
@@ -39,6 +42,18 @@ public:
     void toast(const char *title, const char *message,
                notifications::Kind kind = notifications::Kind::kInfo);
 
+    /// Pre-fill the search field (woketool's --search flag, config restore).
+    void set_search(const char *text) { search_.set_text(text); }
+
+    /// Per-frame read-out for the standalone harness: how many cards survived
+    /// the filters and how far the card pane can scroll. Printed by woketool so
+    /// filtering and the scroll extent are verifiable without a mouse.
+    struct Diagnostics {
+        int   visible_cards = 0;
+        float scroll_max_y  = 0.0f;
+    };
+    Diagnostics diagnostics() const { return diag_; }
+
     /// Escape closes the GUI — macOS sheet semantics.
     bool consume_close_request() {
         const bool r = close_requested_;
@@ -51,31 +66,53 @@ private:
     void draw_sidebar(ImVec2 win_min, ImVec2 win_max, float dt);
     void draw_cards(ImVec2 win_min, ImVec2 win_max, float dt);
 
+    /// Category + search predicate. Both filters apply; an empty search and
+    /// the "All" category are pass-throughs.
+    bool card_visible(const ModuleCard &card) const;
+    int  count_visible() const;
+
     AnimationController anim_;
     NotificationQueue   toasts_;
 
     SearchBar search_;
     CategoryItem categories_[kMaxCats] = {
-        CategoryItem("General",     true),
-        CategoryItem("Appearance",  false),
-        CategoryItem("HUD",         false),
-        CategoryItem("System",      false),
+        CategoryItem("All",        true),
+        CategoryItem("General",    false),
+        CategoryItem("Appearance", false),
+        CategoryItem("HUD",        false),
+        CategoryItem("System",     false),
     };
 
-    // Interface-settings demo cards (see header note).
+    // Interface-settings demo cards (see header note). The trailing number is
+    // the sidebar group the card belongs to.
     ModuleCard cards_[kMaxCards] = {
-        ModuleCard("Notifications", "In-app toast notifications.",       "N"),
-        ModuleCard("Watermark",     "Show the overlay watermark.",       "W"),
-        ModuleCard("FPS Counter",   "Frame-rate readout in the corner.", "F"),
-        ModuleCard("Toast Sounds",  "Play a chime for notifications.",   "S"),
-        ModuleCard("Auto Layout",   "Remember card positions.",          "L"),
-        ModuleCard("Compact Cards", "Denser card list.",                 "C"),
-        ModuleCard("Show Keybinds", "Keybind badges on every card.",     "K"),
-        ModuleCard("Reduced Motion","Ease animations for accessibility.","M"),
-    };
-    int card_count_ = 8;
+        ModuleCard("Notifications",  "In-app toast notifications.",        "N", 1),
+        ModuleCard("Watermark",      "Show the overlay watermark.",        "W", 1),
+        ModuleCard("Toast Sounds",   "Play a chime for notifications.", nullptr, 1),
+        ModuleCard("Compact Cards",  "Denser card list.",                  "C", 1),
 
-    const char *active_category_ = "General";
+        ModuleCard("Auto Layout",    "Remember card positions.",           "L", 2),
+        ModuleCard("Reduced Motion", "Ease animations for accessibility.", nullptr, 2),
+        ModuleCard("Card Shadows",   "Soft drop shadows on cards.",        "H", 2),
+        ModuleCard("Accent Tint",    "Use the system accent colour.",      "T", 2),
+
+        ModuleCard("FPS Counter",    "Frame-rate readout in the corner.",   "F", 3),
+        ModuleCard("Coordinates",    "Show your position on the HUD.",      "P", 3),
+        ModuleCard("Ping Meter",     "Round-trip latency readout.",         "G", 3),
+        ModuleCard("Clock",          "Local time in the HUD strip.",      nullptr, 3),
+
+        ModuleCard("Log Toasts",     "Mirror toasts into the log file.",    "J", 4),
+        ModuleCard("Config Autosave","Write settings on every change.",     "A", 4),
+        ModuleCard("Startup Check",  "Report missing mappings at boot.",    "S", 4),
+        ModuleCard("Debug Overlay",  "Draw channel and frame timings.",    "D", 4),
+    };
+    int card_count_ = 16;
+
+    Diagnostics diag_;
+    int  active_category_ = 0;   // index into categories_
+    /// Set when the category changes so the card pane jumps back to the top on
+    /// the next frame (the scroll offset has to be applied inside the child).
+    bool scroll_reset_    = false;
     bool open_            = true;
     bool close_requested_ = false;
 };
