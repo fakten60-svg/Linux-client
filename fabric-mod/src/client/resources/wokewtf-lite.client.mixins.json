@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "wtf.woke.lite.mixin.client",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "BookEditScreenMixin",
+    "ChatHudMixin",
+    "ScreenshotShareMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

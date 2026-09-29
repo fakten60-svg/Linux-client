@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "wokewtf-lite",
+  "version": "${version}",
+  "name": "woke.wtf Lite",
+  "description": "Client-side quality-of-life HUD, interface and convenience modules for Minecraft 1.21.11. Display and local configuration only: no gameplay effects, no custom packets, no world or server interaction.",
+  "authors": [
+    "woke.wtf"
+  ],
+  "contact": {
+    "sources": "https://github.com/fakten60-svg/Linux-client"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "wtf.woke.lite.WokeLiteClient"
+    ]
+  },
+  "mixins": [
+    "wokewtf-lite.mixins.json",
+    "wokewtf-lite.client.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "fabric-api": "*",
+    "minecraft": "~1.21.11",
+    "java": ">=21"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}
