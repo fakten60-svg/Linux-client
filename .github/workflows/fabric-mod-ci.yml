@@ -1,0 +1,130 @@
+# CI for the Fabric mod that lives in fabric-mod/. The C++ project keeps its own
+# workflow (ci.yml) and is not touched here.
+#
+# Why a separate file and not a second job in ci.yml: a `paths` filter applies to
+# a whole workflow, so putting the mod behind one job would mean dropping the
+# filter the C++ workflow deliberately does not have. Two files keep both
+# trigger sets honest — a C++-only pull request never wakes a job that has to
+# download a Minecraft toolchain.
+#
+# The workflow file itself is in the filter as well. Without it, the pull request
+# that introduces this workflow touches nothing under fabric-mod/ and could not
+# run the job it defines.
+name: Fabric mod CI
+
+on:
+  pull_request:
+    paths:
+      - 'fabric-mod/**'
+      - '.github/workflows/fabric-mod-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'fabric-mod/**'
+      - '.github/workflows/fabric-mod-ci.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fabric-mod:
+    name: build + unit tests (fabric-mod)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: fabric-mod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Temurin 21, the exact toolchain gradle.properties pins via
+      # `options.release = 21`. The Gradle cache is restored through setup-java
+      # (no extra action) so the Minecraft/Loom artifacts are not re-downloaded
+      # on every run; a cache miss only costs time, never correctness.
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      # `build` runs the JUnit 5 suite, which is where the MC-free logic and the
+      # mixin contract (target descriptor, static-ness, local slots) are pinned.
+      #
+      # Deliberately no runClient: a CI runner has no display and no Minecraft
+      # account, and the client boot is not part of the contract these tests
+      # check. `build` is the whole gate.
+      - name: Build and test
+        run: |
+          set -o pipefail
+          ./gradlew clean build --no-daemon --console=plain 2>&1 | tee /tmp/gradle-build.log
+
+      # "BUILD SUCCESSFUL" is not the whole contract: a warning from our own
+      # sources fails the job, exactly as on the C++ side. Warnings raised while
+      # javac reads a classpath jar (Gson's missing InlineMe annotation, and the
+      # like) carry `.jar(...)` on the diagnostic line and are attributed to that
+      # jar — not ours to fix, so they are filtered out by that same marker.
+      - name: Compiler warnings from fabric-mod sources are fatal
+        if: always()
+        run: |
+          log=/tmp/gradle-build.log
+          if [ ! -f "$log" ]; then
+            echo "::notice::no Gradle log at $log (the build step did not run)"
+            exit 0
+          fi
+          total=$(grep -cE 'warning:' "$log" || true)
+          ours=$(grep -E 'warning:' "$log" | grep -v '\.jar(' || true)
+          echo "warning lines in build log: $total (all classpath-jar noise if non-zero)"
+          if [ -n "$ours" ]; then
+            echo "--- warnings attributed to a source file ---"
+            printf '%s\n' "$ours"
+            echo "::error::fabric-mod sources emitted compiler warnings"
+            exit 1
+          fi
+          echo "no compiler warnings from fabric-mod sources"
+
+      # Every file under src/ is measured, resources included: a JSON blob that
+      # outgrows the limit is a design smell just as a class is.
+      - name: No source file may reach 200 lines
+        if: always()
+        run: |
+          over=$(find src -type f -exec wc -l {} + | awk '$1 >= 200 && $2 != "total" {print}')
+          if [ -n "$over" ]; then
+            echo "--- files at or over 200 lines ---"
+            printf '%s\n' "$over"
+            echo "::error::one or more files under fabric-mod/src reach 200 lines"
+            exit 1
+          fi
+          echo "every file under src/ is under 200 lines"
+
+      # Gradle already fails the job on a red test; this step exists so the
+      # numbers are legible at a glance instead of hidden behind a task summary.
+      - name: Test results summary
+        if: always()
+        run: |
+          dir=build/test-results/test
+          if ! compgen -G "$dir/*.xml" > /dev/null; then
+            echo "::notice::no JUnit XML under $dir — the build did not reach the test task"
+            exit 0
+          fi
+          agg() {
+            grep -ho "$1=\"[0-9]*\"" "$dir"/*.xml \
+              | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}'
+          }
+          classes=$(ls "$dir"/*.xml | wc -l)
+          tests=$(agg tests)
+          failures=$(agg failures)
+          errors=$(agg errors)
+          skipped=$(agg skipped)
+          {
+            echo "## fabric-mod test results"
+            echo ""
+            echo "| metric | count |"
+            echo "| --- | --- |"
+            echo "| test classes | $classes |"
+            echo "| tests | $tests |"
+            echo "| failures | $failures |"
+            echo "| errors | $errors |"
+            echo "| skipped | $skipped |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
