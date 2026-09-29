@@ -1,11 +1,9 @@
 package wtf.woke.lite;
 
-import java.nio.file.Path;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.util.ScreenshotRecorder;
 import wtf.woke.lite.config.ConfigIO;
 import wtf.woke.lite.config.ConfigManager;
 import wtf.woke.lite.core.KeybindRegistry;
@@ -16,12 +14,9 @@ import wtf.woke.lite.core.Setting;
 import wtf.woke.lite.core.Settings;
 import wtf.woke.lite.events.ClientEvents;
 import wtf.woke.lite.hud.HudRenderer;
+import wtf.woke.lite.input.KeybindBridge;
 import wtf.woke.lite.modules.hud.FpsModule;
-import wtf.woke.lite.modules.ui.BookModule;
-import wtf.woke.lite.modules.ui.ChatModule;
-import wtf.woke.lite.modules.ui.CrosshairModule;
 import wtf.woke.lite.modules.ui.InventorySortModule;
-import wtf.woke.lite.modules.ui.ScreenshotModule;
 import wtf.woke.lite.modules.ui.WaypointModule;
 
 /**
@@ -29,9 +24,11 @@ import wtf.woke.lite.modules.ui.WaypointModule;
  * whole thing to Fabric's client events.
  *
  * <p>Startup order matters and is deliberate: modules register first so their
- * settings exist, shipped defaults are applied second, and the config file is
- * loaded last so it can override both. Anything that later needs the framework
- * (config screen, keybinds) reads it through the accessors below.</p>
+ * settings and keybinds exist, the keybinds are then handed to the game,
+ * shipped defaults are applied third, and the config file is loaded last so it
+ * can override both. Anything that later needs the framework reads it through
+ * the accessors below. Which modules exist is {@link WokeLiteModules}' business,
+ * not this class's.</p>
  */
 @Environment(EnvType.CLIENT)
 public final class WokeLiteClient implements ClientModInitializer {
@@ -45,16 +42,13 @@ public final class WokeLiteClient implements ClientModInitializer {
     private static ModuleRegistry registry;
     private static ConfigManager config;
     private static ModuleDispatcher dispatcher;
-    private static KeybindRegistry keybinds;
-    private static CrosshairModule crosshair;
-    private static WaypointModule waypoints;
-    private static InventorySortModule inventorySort;
+    private static KeybindBridge keybinds;
+    private static WokeLiteModules.Graph graph;
 
     @Override
     public void onInitializeClient() {
         registry = new ModuleRegistry();
-        keybinds = new KeybindRegistry();
-        config = new ConfigManager(registry, new ConfigIO(configDirectory()));
+        config = new ConfigManager(registry, new ConfigIO(FabricLoader.getInstance().getConfigDir()));
 
         Setting<Boolean> background = config.addGlobalSetting(
                 Settings.bool("hud.background", true).describedBy("wokewtf.lite.setting.hud.background", null));
@@ -65,7 +59,9 @@ public final class WokeLiteClient implements ClientModInitializer {
                 Settings.color("hud.textColor", DEFAULT_TEXT_COLOR)
                         .describedBy("wokewtf.lite.setting.hud.textColor", null));
 
-        registerModules();
+        graph = WokeLiteModules.register(registry);
+        keybinds = new KeybindBridge(registry.keybinds());
+        int bindings = keybinds.install();
         applyShippedDefaults();
 
         boolean loaded = config.load();
@@ -73,11 +69,18 @@ public final class WokeLiteClient implements ClientModInitializer {
 
         dispatcher = new ModuleDispatcher(registry);
         HudRenderer hudRenderer = new HudRenderer(registry, background, backgroundColor, textColor);
-        ClientEvents.register(config, dispatcher, hudRenderer, crosshair, waypoints, inventorySort);
+        ClientEvents.register(config, dispatcher, hudRenderer, graph.crosshair(), graph.waypoints(),
+                graph.inventorySort(), new ClientEvents.Convenience(keybinds, graph.autoReconnect(),
+                        graph.respawnConfirm(), graph.chatMacros(), graph.stats()));
 
-        WokeLite.LOGGER.info("{} v{} ready: {} modules ({} enabled), config {} (Minecraft 1.21.11, Fabric Loader {})",
-                WokeLite.MOD_NAME, resolvedVersion(), registry.size(), enabledModuleCount(),
-                loaded ? "loaded" : "defaults", loaderVersion());
+        WokeLite.LOGGER.info("{} v{} ready: {} modules ({} enabled), {} keybinds, config {} (Minecraft 1.21.11, "
+                + "Fabric Loader {})", WokeLite.MOD_NAME, resolvedVersion(), registry.size(), enabledModuleCount(),
+                bindings, loaded ? "loaded" : "defaults", loaderVersion());
+        // Named one by one: the count above says a module went missing, this
+        // says which, and it is the only line that proves a module registered
+        // rather than merely being counted.
+        WokeLite.LOGGER.info("Registered modules: {}",
+                String.join(", ", registry.all().stream().map(QoLModule::id).toList()));
     }
 
     /** The module registry built during initialisation. */
@@ -95,52 +98,32 @@ public final class WokeLiteClient implements ClientModInitializer {
         return dispatcher;
     }
 
-    /** The keybind registry, filled in as keybinding features land. */
+    /** The mod's keybind declarations, as the game knows them. */
     public static KeybindRegistry keybinds() {
-        return keybinds;
+        return registry.keybinds();
     }
 
     /** The module holding the player's stored waypoints. */
     public static WaypointModule waypoints() {
-        return waypoints;
+        return graph.waypoints();
     }
 
     /** The module that reorders the player's own inventory. */
     public static InventorySortModule inventorySort() {
-        return inventorySort;
-    }
-
-    private static Path configDirectory() {
-        return FabricLoader.getInstance().getConfigDir();
-    }
-
-    /** Registers every module this build ships. */
-    private static void registerModules() {
-        registry.register(new FpsModule());
-        crosshair = new CrosshairModule();
-        registry.register(crosshair);
-        registry.register(new ChatModule());
-        registry.register(new BookModule());
-        registry.register(new ScreenshotModule(screenshotDirectory()));
-        waypoints = new WaypointModule();
-        registry.register(waypoints);
-        inventorySort = new InventorySortModule();
-        registry.register(inventorySort);
-    }
-
-    /** @return the directory the game writes screenshots into */
-    private static Path screenshotDirectory() {
-        return FabricLoader.getInstance().getGameDir().resolve(ScreenshotRecorder.SCREENSHOTS_DIRECTORY);
+        return graph.inventorySort();
     }
 
     /**
      * Applies the state a fresh install should start in. The config file, if it
      * exists, is loaded afterwards and wins.
      *
-     * <p>The interface modules ({@code ui.crosshair}, {@code ui.chat},
-     * {@code ui.book}, {@code ui.screenshot}, {@code ui.waypoints},
-     * {@code ui.inventory_sort}) are deliberately not enabled here: they change
-     * how the game behaves or looks, so they stay opt-in.</p>
+     * <p>Only {@code hud.fps} is enabled here. Everything else — the interface
+     * modules and every convenience module — changes how the game behaves or
+     * looks, so all of it stays opt-in. That includes the two the request did
+     * not name a default for ({@code util.respawn_confirm}, which delays a
+     * button, and {@code util.stats}, which starts writing counters): the rule
+     * this build has followed so far is that nothing is switched on for the
+     * player.</p>
      */
     private static void applyShippedDefaults() {
         registry.setEnabled(FpsModule.MODULE_ID, true);

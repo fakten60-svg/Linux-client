@@ -1,15 +1,9 @@
 package wtf.woke.lite;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -19,6 +13,7 @@ import wtf.woke.lite.core.ModuleCategory;
 import wtf.woke.lite.hud.CrosshairStyle;
 import wtf.woke.lite.inventory.SortOrder;
 import wtf.woke.lite.inventory.SortResult;
+import wtf.woke.lite.testutil.LanguageFile;
 import wtf.woke.lite.waypoint.WaypointResult;
 
 /**
@@ -29,29 +24,14 @@ import wtf.woke.lite.waypoint.WaypointResult;
  * shows the raw key, which is how a renamed setting ends up looking broken only
  * to whoever reads the config screen. These assertions come from the enums
  * themselves, so they follow a rename instead of pinning it.</p>
+ *
+ * <p>The convenience modules have their own file, so neither test has to hold
+ * the whole language file's worth of keys at once.</p>
  */
 class WokeLiteLanguageTest {
 
-    private static final String LANGUAGE_FILE = "/assets/wokewtf-lite/lang/en_us.json";
-
-    private static JsonObject language() {
-        InputStream stream = WokeLiteLanguageTest.class.getResourceAsStream(LANGUAGE_FILE);
-        assertNotNull(stream, LANGUAGE_FILE + " must be on the classpath");
-        try (Reader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
-            return JsonParser.parseReader(reader).getAsJsonObject();
-        } catch (Exception cause) {
-            throw new AssertionError(LANGUAGE_FILE + " must be valid JSON", cause);
-        }
-    }
-
-    private static void assertTranslated(JsonObject language, List<String> keys) {
-        List<String> missing = keys.stream().filter(key -> !language.has(key)).toList();
-        assertEquals(List.of(), missing, "no English text for: " + missing);
-    }
-
     @Test
     void everyEnumLabelHasEnglishText() {
-        JsonObject language = language();
         List<String> keys = new ArrayList<>();
         for (ModuleCategory value : ModuleCategory.values()) {
             keys.add(value.translationKey());
@@ -76,13 +56,12 @@ class WokeLiteLanguageTest {
             keys.add(value.translationKey());
         }
 
-        assertTranslated(language, keys);
+        LanguageFile.assertTranslated(LanguageFile.load(), keys);
     }
 
     @Test
     void theShippedFeaturesAndTheirCommandStringsHaveEnglishText() {
-        JsonObject language = language();
-        List<String> keys = List.of(
+        LanguageFile.assertTranslated(LanguageFile.load(), List.of(
                 "wokewtf.lite.module.ui.screenshot",
                 "wokewtf.lite.module.ui.screenshot.description",
                 "wokewtf.lite.module.ui.screenshot.setting.copyPath",
@@ -115,18 +94,19 @@ class WokeLiteLanguageTest {
                 "wokewtf.lite.command.waypoint.list.header",
                 "wokewtf.lite.command.waypoint.list.entry",
                 "wokewtf.lite.reason.no_world",
-                "wokewtf.lite.reason.own_world_only");
-
-        assertTranslated(language, keys);
+                "wokewtf.lite.reason.own_world_only"));
     }
 
     @Test
     void everyKeyBelongsToThisMod() {
-        List<String> foreign = language().keySet().stream()
-                .filter(key -> !key.startsWith("wokewtf.lite."))
+        List<String> foreign = LanguageFile.load().keySet().stream()
+                .filter(key -> !key.startsWith(LanguageFile.MOD_PREFIX))
+                .filter(key -> !key.startsWith(LanguageFile.KEYBIND_CATEGORY_PREFIX))
                 .toList();
 
         assertEquals(List.of(), foreign, "language keys must stay under the mod's own prefix");
-        assertTrue(language().size() > 50, "the language file should cover the shipped features");
+        assertTrue(LanguageFile.load().has(LanguageFile.KEYBIND_CATEGORY_PREFIX + "main"),
+                "the keybind category label must exist under the key the game builds");
+        assertTrue(LanguageFile.load().size() > 50, "the language file should cover the shipped features");
     }
 }

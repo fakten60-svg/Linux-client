@@ -5,6 +5,8 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import wtf.woke.lite.WokeLite;
 import wtf.woke.lite.modules.ui.InventorySortModule;
 import wtf.woke.lite.modules.ui.WaypointModule;
+import wtf.woke.lite.modules.util.ChatMacrosModule;
+import wtf.woke.lite.modules.util.StatsModule;
 
 /**
  * The mod's client command, {@code /wokewtf}.
@@ -31,14 +33,19 @@ public final class WokeLiteCommands {
      *
      * @param waypoints     the module holding the stored waypoints
      * @param inventorySort the module that replays a sort plan
+     * @param chatMacros    the module holding the stored chat macros
+     * @param stats         the module holding the local counters
      */
-    public static void register(WaypointModule waypoints, InventorySortModule inventorySort) {
+    public static void register(WaypointModule waypoints, InventorySortModule inventorySort,
+            ChatMacrosModule chatMacros, StatsModule stats) {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             dispatcher.register(ClientCommandManager.literal(ROOT)
                     .then(WaypointCommand.node(waypoints))
-                    .then(InventorySortCommand.node(inventorySort)));
+                    .then(InventorySortCommand.node(inventorySort))
+                    .then(ChatMacroCommand.node(chatMacros))
+                    .then(StatsCommand.node(stats)));
             // Runs on every world join: Fabric builds the client dispatcher then.
-            WokeLite.LOGGER.info("Client command '/{}' ready for this session (waypoint, sort)", ROOT);
+            WokeLite.LOGGER.info("Client command '/{}' ready for this session (waypoint, sort, macro, stats)", ROOT);
         });
     }
 }

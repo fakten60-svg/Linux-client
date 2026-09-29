@@ -14,10 +14,16 @@ import java.util.Optional;
  * in a stable order. Once {@link #freeze()} is called no further modules may be
  * registered, which turns "a module was added after the config was applied"
  * from a silent behaviour change into a startup failure.</p>
+ *
+ * <p>The registry also owns the {@link KeybindRegistry}, because
+ * {@link QoLModule#onRegister} is where a module declares what it wants and the
+ * keybinds must exist before the client layer can turn them into real
+ * bindings. One owner means there is one list of them, not one per caller.</p>
  */
 public final class ModuleRegistry {
 
     private final Map<String, QoLModule> modules = new LinkedHashMap<>();
+    private final KeybindRegistry keybinds = new KeybindRegistry();
 
     private Runnable dirtyMarker = () -> { };
     private boolean frozen;
@@ -44,6 +50,14 @@ public final class ModuleRegistry {
         // settings must not be left half-registered.
         module.bind(this);
         modules.put(module.id(), module);
+    }
+
+    /**
+     * @return the keybinds the registered modules declared, for the client
+     *         layer to turn into real bindings
+     */
+    public KeybindRegistry keybinds() {
+        return keybinds;
     }
 
     /** Prevents any further registration. */
