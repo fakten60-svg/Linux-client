@@ -129,29 +129,10 @@ are parsed and answered by your own client and are never sent to a server.
 Client commands only exist once you have joined a world, which is when Fabric
 builds the client command dispatcher.
 
-## What this does NOT do
+## Scope
 
-This list is the point of the project, not a disclaimer bolted on. If you are
-looking for any of it, this mod is not for you.
-
-- **No combat assist.** No killaura, aim assist, trigger bot, criticals, or
-  anything that swings, aims or clicks for you.
-- **No movement assist.** No fly, speed, jump boost, step, no-fall, spider or
-  any other change to how you move.
-- **Nothing seen through walls.** No ESP, tracers, glow, or X-ray.
-- **No reach or hitbox changes.** You hit what vanilla lets you hit.
-- **No auto-clicker and no packet manipulation.** The mod does not craft, alter
-  or replay network packets.
-- **No server-integrity bypass.** Nothing here tries to get past a ban, a
-  permission check, or a server's own rules. Auto Reconnect re-logs in with your
-  existing session through the ordinary connect flow, so a server that refuses
-  you refuses you again — and it never retries in a loop.
-- **Inventory Sort only rearranges your own inventory, and only in singleplayer
-  or on the LAN world you host.** On a server somebody else runs it never
-  becomes active.
-
-The one thing it does to somebody else's screen is nothing: no module sends
-anything, and no module changes what any other player sees.
+What the mod deliberately does **not** do is the point of the project, not a
+disclaimer bolted on: the full list lives in [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Mod Menu
 
@@ -185,6 +166,32 @@ carrying pure logic has tests.
 
 `MANUAL_TEST_CHECKLIST.md` in this directory lists the paths that need a running
 game and a pair of hands — the ones the automated suite cannot reach.
+
+## Debugging
+
+A failed manual test is diagnosed from the log: `run/logs/latest.log` for the
+current session and `run/logs/debug.log` for everything else (a normal install
+keeps the same two files under `.minecraft/logs/`).
+
+- **This mod's lines** all carry the tag `(wtf Lite)`, e.g.
+  `[Render thread/INFO] (wtf Lite) ...`. Anything else is the game or Fabric.
+- **Loaded, and how many modules?** Startup prints one line:
+  `woke.wtf Lite v0.1.0 ready: 13 modules (N enabled), 24 keybinds, config ...`,
+  then `Registered modules: hud.fps, ui.crosshair, ...`.
+- **Is a module active?** There is no per-module line yet; `(N enabled)` and the
+  config file are the current answer. A line per module would be a small add-on.
+- **Did a mixin apply?** Mixin logs at DEBUG only: search `debug.log` for
+  `wokewtf-lite.client.mixins.json` to find `Mixing <Name> from
+  wokewtf-lite.client.mixins.json into ...`. A mixin appears when its target
+  first loads, so `BookEditScreenMixin` and `ScreenshotShareMixin` may be absent
+  until you open a book or take a screenshot.
+- **Per-module verbose logging?** None yet. Failures stay visible: the
+  dispatcher logs `Module '<id>' threw during <phase>; disabling it` at ERROR.
+  A per-module toggle is worth building only if the manual session keeps turning
+  up module behaviour the log cannot explain.
+
+Report a failed test with the template in `ISSUE_TEMPLATE.md`, using the ids in
+`MANUAL_TEST_CHECKLIST.md`.
 
 ## License
 

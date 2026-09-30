@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
@@ -87,13 +88,20 @@ public final class KeybindBridge {
     }
 
     /**
-     * Finds keys this mod and the game both want.
+     * Finds keys this mod and something else both want.
      *
      * <p>Reads the live bound keys, not the shipped defaults, so a rebind on
      * either side is caught. The game's own bindings are labelled with their
      * translation key, which is the only stable name they have.</p>
      *
-     * @return every key claimed by more than one binding
+     * <p>Only pairs that involve one of this mod's bindings are returned. The
+     * vanilla bindings collide with each other on purpose — the debug keys share
+     * the movement keys — and reporting those would drown the pairs a player can
+     * actually act on. {@link KeybindConflicts#involving} does that filtering, so
+     * the definition of "ours" stays in this one place.</p>
+     *
+     * @return every conflicting key claimed by one of this mod's bindings and
+     *         anything else registered with the game
      */
     public List<KeybindConflicts.Conflict> conflicts(MinecraftClient client) {
         Map<String, String> ownerToKey = new LinkedHashMap<>();
@@ -108,7 +116,7 @@ public final class KeybindBridge {
                 ownerToKey.putIfAbsent(vanilla.getId(), vanilla.getBoundKeyTranslationKey());
             }
         }
-        return KeybindConflicts.find(ownerToKey);
+        return KeybindConflicts.involving(ownerToKey, Set.copyOf(bindings.keySet()));
     }
 
     private boolean isOurs(KeyBinding candidate) {

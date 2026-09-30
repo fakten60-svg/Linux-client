@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /** Pins what counts as a collision, and what must not. */
@@ -80,5 +81,59 @@ class KeybindConflictsTest {
     @Test
     void anEmptyMapHasNoConflicts() {
         assertTrue(KeybindConflicts.find(Map.of()).isEmpty());
+    }
+
+    // --- involving: only conflicts the caller's bindings take part in ---------
+
+    @Test
+    void anOwnBindingClashingWithVanillaIsReported() {
+        List<KeybindConflicts.Conflict> conflicts = KeybindConflicts.involving(
+                bindings("config.open", "key.keyboard.f1", "key.debug.help", "key.keyboard.f1"),
+                Set.of("config.open"));
+
+        assertEquals(1, conflicts.size());
+        assertEquals("key.keyboard.f1", conflicts.get(0).key());
+        assertEquals(List.of("config.open", "key.debug.help"), conflicts.get(0).owners());
+    }
+
+    @Test
+    void twoVanillaBindingsSharingAKeyAreNotReported() {
+        List<KeybindConflicts.Conflict> conflicts = KeybindConflicts.involving(
+                bindings("key.left", "key.keyboard.a", "key.debug.reloadChunk", "key.keyboard.a"),
+                Set.of("config.open"));
+
+        assertEquals(List.of(), conflicts);
+    }
+
+    @Test
+    void anOwnBindingClashingWithAnotherOwnBindingIsReported() {
+        List<KeybindConflicts.Conflict> conflicts = KeybindConflicts.involving(
+                bindings("config.open", "key.keyboard.g", "util.fullscreen_key.keybind", "key.keyboard.g"),
+                Set.of("config.open", "util.fullscreen_key.keybind"));
+
+        assertEquals(1, conflicts.size());
+        assertEquals(List.of("config.open", "util.fullscreen_key.keybind"), conflicts.get(0).owners());
+    }
+
+    @Test
+    void involvingKeepsOnlyTheOwnPairsFromAMixedMap() {
+        List<KeybindConflicts.Conflict> conflicts = KeybindConflicts.involving(bindings(
+                "key.left", "key.keyboard.a",
+                "key.debug.reloadChunk", "key.keyboard.a",
+                "config.open", "key.keyboard.f1",
+                "key.debug.help", "key.keyboard.f1"),
+                Set.of("config.open"));
+
+        assertEquals(1, conflicts.size());
+        assertEquals("key.keyboard.f1", conflicts.get(0).key());
+    }
+
+    @Test
+    void involvingWithoutAnyOwnBindingsReportsNothing() {
+        List<KeybindConflicts.Conflict> conflicts = KeybindConflicts.involving(
+                bindings("key.left", "key.keyboard.a", "key.debug.reloadChunk", "key.keyboard.a"),
+                Set.of());
+
+        assertEquals(List.of(), conflicts);
     }
 }
