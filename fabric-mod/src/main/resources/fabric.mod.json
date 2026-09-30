@@ -15,6 +15,9 @@
   "entrypoints": {
     "client": [
       "wtf.woke.lite.WokeLiteClient"
+    ],
+    "modmenu": [
+      "wtf.woke.lite.ModMenuIntegration"
     ]
   },
   "mixins": [
@@ -28,6 +31,6 @@
     "java": ">=21"
   },
   "suggests": {
-    "modmenu": "*"
+    "modmenu": ">=17.0.0"
   }
 }

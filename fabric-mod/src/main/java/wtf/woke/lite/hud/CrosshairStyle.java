@@ -1,6 +1,7 @@
 package wtf.woke.lite.hud;
 
 import java.util.Locale;
+import wtf.woke.lite.core.Labelled;
 
 /**
  * Which crosshair the {@code ui.crosshair} module paints.
@@ -11,7 +12,7 @@ import java.util.Locale;
  *
  * <p>No Minecraft types, so it is unit-testable without a game.</p>
  */
-public enum CrosshairStyle {
+public enum CrosshairStyle implements Labelled {
 
     /** The classic four-arm cross. */
     CROSS,

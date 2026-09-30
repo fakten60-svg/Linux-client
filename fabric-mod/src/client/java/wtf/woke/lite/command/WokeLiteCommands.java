@@ -40,12 +40,14 @@ public final class WokeLiteCommands {
             ChatMacrosModule chatMacros, StatsModule stats) {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             dispatcher.register(ClientCommandManager.literal(ROOT)
+                    .then(ConfigCommand.node())
                     .then(WaypointCommand.node(waypoints))
                     .then(InventorySortCommand.node(inventorySort))
                     .then(ChatMacroCommand.node(chatMacros))
                     .then(StatsCommand.node(stats)));
             // Runs on every world join: Fabric builds the client dispatcher then.
-            WokeLite.LOGGER.info("Client command '/{}' ready for this session (waypoint, sort, macro, stats)", ROOT);
+            WokeLite.LOGGER.info("Client command '/{}' ready for this session (config, waypoint, sort, macro, stats)",
+                    ROOT);
         });
     }
 }

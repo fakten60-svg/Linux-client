@@ -21,14 +21,23 @@ public final class Settings {
         return new Setting<>(id, SettingType.BOOLEAN, defaultValue);
     }
 
-    /** Integer clamped to {@code [min, max]}. */
+    /**
+     * Integer clamped to {@code [min, max]}.
+     *
+     * <p>The bounds are also recorded on the setting, so the config screen's
+     * slider and the validator agree on what the range is.</p>
+     */
     public static Setting<Integer> integer(String id, int defaultValue, int min, int max) {
-        return new Setting<Integer>(id, SettingType.INT, defaultValue).validatedBy(Validator.clampInt(min, max));
+        return new Setting<Integer>(id, SettingType.INT, defaultValue)
+                .validatedBy(Validator.clampInt(min, max))
+                .rangedBy(min, max);
     }
 
-    /** Decimal clamped to {@code [min, max]}. */
+    /** Decimal clamped to {@code [min, max]}, with the same bounds recorded. */
     public static Setting<Double> decimal(String id, double defaultValue, double min, double max) {
-        return new Setting<Double>(id, SettingType.DOUBLE, defaultValue).validatedBy(Validator.clampDouble(min, max));
+        return new Setting<Double>(id, SettingType.DOUBLE, defaultValue)
+                .validatedBy(Validator.clampDouble(min, max))
+                .rangedBy(min, max);
     }
 
     /** Free text capped at {@code maxLength} characters. */
