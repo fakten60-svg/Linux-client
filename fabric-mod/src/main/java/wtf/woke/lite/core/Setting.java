@@ -32,6 +32,8 @@ public final class Setting<T> {
     private String translationKey;
     private String descriptionKey;
     private Class<? extends Enum<?>> enumType;
+    private double rangeMin;
+    private double rangeMax;
 
     Setting(String id, SettingType type, T defaultValue) {
         this.id = Objects.requireNonNull(id, "id");
@@ -139,8 +141,31 @@ public final class Setting<T> {
     }
 
     /** @return the enum constants of an {@code ENUM} setting, else an empty array */
-    Enum<?>[] enumConstants() {
+    public Enum<?>[] enumConstants() {
         return enumType == null ? new Enum<?>[0] : enumType.getEnumConstants();
+    }
+
+    /**
+     * Records the bounds a config-screen slider may pick from.
+     *
+     * <p>Stored rather than derived: the validator clamps into the range but does
+     * not expose it, so a slider that guessed would let a value be dragged past
+     * what the validator keeps.</p>
+     */
+    Setting<T> rangedBy(double min, double max) {
+        this.rangeMin = min;
+        this.rangeMax = max;
+        return this;
+    }
+
+    /** @return the lowest value a slider may pick */
+    public double rangeMin() {
+        return rangeMin;
+    }
+
+    /** @return the highest value a slider may pick */
+    public double rangeMax() {
+        return rangeMax;
     }
 
     /** Records the enum type so config decoding can resolve constants by name. */

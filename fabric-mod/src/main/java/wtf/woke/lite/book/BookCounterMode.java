@@ -1,6 +1,7 @@
 package wtf.woke.lite.book;
 
 import java.util.Locale;
+import wtf.woke.lite.core.Labelled;
 
 /**
  * What the book page counter reports.
@@ -11,7 +12,7 @@ import java.util.Locale;
  *
  * <p>No Minecraft types, so it is unit-testable without a game.</p>
  */
-public enum BookCounterMode {
+public enum BookCounterMode implements Labelled {
 
     /** {@code 384 / 1024 characters} */
     USED("wokewtf.lite.module.ui.book.counter.used"),

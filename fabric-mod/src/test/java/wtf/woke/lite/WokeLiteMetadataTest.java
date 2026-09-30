@@ -86,6 +86,22 @@ class WokeLiteMetadataTest {
     }
 
     @Test
+    void modMenuIsSuggestedRatherThanRequired() {
+        JsonObject metadata = modMetadata();
+        assertEquals(false, metadata.getAsJsonObject("depends").has("modmenu"),
+                "a hard Mod Menu dependency would stop the mod from loading without it");
+
+        JsonObject suggests = metadata.getAsJsonObject("suggests");
+        assertNotNull(suggests, "Mod Menu has to be declared as a suggestion");
+        assertEquals(">=17.0.0", suggests.get("modmenu").getAsString());
+
+        // The integration class is deliberately not loaded here: Mod Menu is not on
+        // the test classpath, which is exactly what "optional" means.
+        assertEquals("wtf.woke.lite.ModMenuIntegration",
+                metadata.getAsJsonObject("entrypoints").getAsJsonArray("modmenu").get(0).getAsString());
+    }
+
+    @Test
     void mixinConfigsAreDeclaredAndPresent() {
         JsonObject metadata = modMetadata();
         assertEquals(2, metadata.getAsJsonArray("mixins").size(),

@@ -16,7 +16,17 @@ public enum ModuleCategory {
     INTERFACE("ui"),
 
     /** Local convenience features. */
-    CONVENIENCE("util");
+    CONVENIENCE("util"),
+
+    /**
+     * The mod's own settings rather than a module's.
+     *
+     * <p>No module declares this: it exists so the config screen's sidebar can
+     * show the mod-level settings in the same shape as everything else, instead
+     * of being a special case bolted onto the screen. It is declared last so it
+     * sorts to the bottom of that sidebar.</p>
+     */
+    GLOBAL("global");
 
     private final String slug;
 

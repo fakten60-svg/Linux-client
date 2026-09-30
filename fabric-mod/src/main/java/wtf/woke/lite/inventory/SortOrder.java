@@ -2,6 +2,7 @@ package wtf.woke.lite.inventory;
 
 import java.util.Comparator;
 import java.util.Locale;
+import wtf.woke.lite.core.Labelled;
 
 /**
  * How the sorted inventory is ordered.
@@ -12,7 +13,7 @@ import java.util.Locale;
  *
  * <p>No Minecraft types, so it is unit-testable without a game.</p>
  */
-public enum SortOrder {
+public enum SortOrder implements Labelled {
 
     /** Alphabetical by display name. */
     NAME,

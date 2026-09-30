@@ -1,5 +1,8 @@
 package wtf.woke.lite.hud;
 
+import java.util.Locale;
+import wtf.woke.lite.core.Labelled;
+
 /**
  * Where a HUD element is pinned on screen, and which way its offsets move it.
  *
@@ -11,7 +14,7 @@ package wtf.woke.lite.hud;
  * <p>Pure integer geometry with no Minecraft types, so it can be unit-tested
  * without a game.</p>
  */
-public enum HudAnchor {
+public enum HudAnchor implements Labelled {
 
     TOP_LEFT(Alignment.START, Alignment.START),
     TOP_CENTER(Alignment.CENTER, Alignment.START),
@@ -36,6 +39,12 @@ public enum HudAnchor {
     HudAnchor(Alignment horizontal, Alignment vertical) {
         this.horizontal = horizontal;
         this.vertical = vertical;
+    }
+
+    /** @return the translation key for this anchor's name in the config screen */
+    @Override
+    public String translationKey() {
+        return "wokewtf.lite.anchor." + name().toLowerCase(Locale.ROOT);
     }
 
     public Alignment horizontal() {

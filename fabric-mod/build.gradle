@@ -11,6 +11,11 @@ base {
 
 repositories {
     mavenCentral()
+    // Mod Menu's own maven. Only consulted for the optional integration below;
+    // nothing else here resolves from it.
+    maven {
+        url = 'https://maven.terraformersmc.com/releases/'
+    }
 }
 
 loom {
@@ -32,6 +37,12 @@ dependencies {
     mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+    // Mod Menu is optional: compiled against so the integration class can
+    // implement its interface, never bundled and never a runtime requirement.
+    // Without it the mod loads exactly as before and only Mod Menu's own
+    // "Configure" button is missing.
+    modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
 
     // Tests must not need a game instance. Minecraft ships slf4j and Gson, but
     // the test runtime classpath is not the game's, so they are declared

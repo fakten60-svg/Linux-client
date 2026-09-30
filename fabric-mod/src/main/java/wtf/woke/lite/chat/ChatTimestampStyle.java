@@ -4,6 +4,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Objects;
+import wtf.woke.lite.core.Labelled;
 
 /**
  * How a chat timestamp is written.
@@ -16,7 +17,7 @@ import java.util.Objects;
  *
  * <p>No Minecraft types, so it is unit-testable without a game.</p>
  */
-public enum ChatTimestampStyle {
+public enum ChatTimestampStyle implements Labelled {
 
     /** {@code [14:32] } */
     HOUR_MINUTE("HH:mm"),

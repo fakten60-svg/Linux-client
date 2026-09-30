@@ -3,6 +3,7 @@
   "wokewtf.lite.category.hud": "HUD",
   "wokewtf.lite.category.ui": "Interface",
   "wokewtf.lite.category.util": "Convenience",
+  "wokewtf.lite.category.global": "Global",
   "key.category.wokewtf-lite.main": "woke.wtf Lite",
 
   "wokewtf.lite.module.hud.fps": "FPS Counter",
@@ -168,6 +169,15 @@
   "wokewtf.lite.setting.hud.background": "HUD Background",
   "wokewtf.lite.setting.hud.backgroundColor": "Background Color",
   "wokewtf.lite.setting.hud.textColor": "Text Color",
+
+  "wokewtf.lite.config.title": "woke.wtf Lite Settings",
+  "wokewtf.lite.config.search": "Search modules",
+  "wokewtf.lite.config.search.tooltip": "Filters the list by module name or description.",
+  "wokewtf.lite.config.empty": "No module matches this search.",
+  "wokewtf.lite.config.reset": "Reset",
+  "wokewtf.lite.config.reset.tooltip": "Restore this setting's default value.",
+  "wokewtf.lite.config.global.description": "Settings that apply to the mod as a whole.",
+  "wokewtf.lite.keybind.open_config": "Open Settings",
 
   "wokewtf.lite.anchor.top_left": "Top Left",
   "wokewtf.lite.anchor.top_center": "Top Center",

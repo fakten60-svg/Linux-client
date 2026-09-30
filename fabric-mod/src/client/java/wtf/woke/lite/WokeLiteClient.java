@@ -18,6 +18,7 @@ import wtf.woke.lite.input.KeybindBridge;
 import wtf.woke.lite.modules.hud.FpsModule;
 import wtf.woke.lite.modules.ui.InventorySortModule;
 import wtf.woke.lite.modules.ui.WaypointModule;
+import wtf.woke.lite.screen.WokeConfigScreen;
 
 /**
  * Client entrypoint: builds the module graph, loads the config, and hands the
@@ -60,6 +61,10 @@ public final class WokeLiteClient implements ClientModInitializer {
                         .describedBy("wokewtf.lite.setting.hud.textColor", null));
 
         graph = WokeLiteModules.register(registry);
+        // The config screen belongs to the mod rather than to one module, so its
+        // bind is declared here, after the modules and before the bindings are
+        // handed to the game.
+        registry.keybinds().register(WokeConfigScreen.keybind());
         keybinds = new KeybindBridge(registry.keybinds());
         int bindings = keybinds.install();
         applyShippedDefaults();
