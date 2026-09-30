@@ -13,6 +13,11 @@ import wtf.woke.lite.keybind.KeybindConflicts;
  * looking broken for no visible reason. One line at startup and one per world
  * join is enough to explain it without nagging.</p>
  *
+ * <p>Only conflicts that involve one of this mod's own bindings reach here —
+ * {@link KeybindBridge#conflicts} drops the rest — so neither the log nor the
+ * chat mentions a vanilla-only pair such as the debug keys sharing the
+ * movement keys.</p>
+ *
  * <p>An instance rather than a static helper because the startup report has to
  * wait: during the client entrypoint the game has not built its options yet, so
  * the bindings cannot be read. Ticking once is the earliest moment the answer
@@ -52,7 +57,7 @@ public final class KeybindConflictReport {
         }
         List<String> keys = conflicts.stream().map(KeybindConflicts.Conflict::key).toList();
         for (KeybindConflicts.Conflict conflict : conflicts) {
-            WokeLite.LOGGER.warn("Keybind conflict: {} is bound to {}", conflict.key(),
+            WokeLite.LOGGER.warn("Keybind conflict: {} is shared by {}", conflict.key(),
                     String.join(" and ", conflict.owners()));
         }
         client.inGameHud.getChatHud().addMessage(

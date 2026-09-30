@@ -1,199 +1,199 @@
 # Manual test checklist
 
-Every path on this list needs a running game, a display and a pair of hands.
-The automated suite covers the logic that needs none of those; this file is what
-is left, and its job is to be the honest counterpart to a green build.
-
-How to use it: work top to bottom, tick what passes, and file what does not.
-Each item says *what to do* and *what a pass looks like*. Anything you cannot
-produce is a failure, not a "probably fine".
+Every path here needs a running game, a display and a pair of hands. The
+automated suite covers the logic that needs none of those; this file is what is
+left, and its job is to be the honest counterpart to a green build.
 
 ## Before you start
 
-- [ ] Fresh profile: Fabric Loader 0.19.5+, Fabric API `0.141.6+1.21.11`, Java 21.
-- [ ] Back up `config/wokewtf-lite.json` if it exists, then delete it, so the run starts from defaults.
-- [ ] Start the game and confirm the log line `woke.wtf Lite v… ready: 13 modules (1 enabled), 24 keybinds`.
-- [ ] Confirm the log lists all 13 ids, from `hud.fps` to `util.stats`.
-- [ ] Confirm **Options → Controls** shows a "woke.wtf Lite" category with 24 bindings: **Open Settings** on Right Shift, the other 23 unbound.
+- [ ] Java 21, Fabric Loader 0.19.5+, Fabric API `0.141.6+1.21.11`.
+- [ ] `./gradlew clean build` is green.
+- [ ] Start the client with `scripts/test_session.sh`. It resets
+      `run/config/wokewtf-lite.json` so **every module is off**, which is the
+      baseline each test below assumes.
+- [ ] In `run/logs/latest.log`, confirm
+      `woke.wtf Lite v0.1.0 ready: 13 modules (0 enabled), 24 keybinds` and the
+      list `Registered modules: hud.fps, … util.stats`.
+- [ ] **Options → Controls** shows a `woke.wtf Lite` category with 24 bindings.
+- [ ] Client commands (`/wokewtf …`) exist only after you join a world.
+
+## How to read an entry
+
+Each entry has a unique **test ID**, e.g. `T-07`. Work top to bottom, tick what
+passes, and report what does not as "T-07 failed" using the template in
+`ISSUE_TEMPLATE.md`. **Do** is what you perform, **Expect** is a pass, and
+**Fail** is anything in between — including "nothing happened".
+
+## T-00 — Build and startup (prerequisite)
+
+- **Do:** build the mod, then start via `scripts/test_session.sh` and read the log.
+- **Expect:** the build is green; startup logs 13 modules and 24 keybinds with no
+  WARN or ERROR from `(wtf Lite)`, and no `Keybind conflict` line while no mod key
+  is bound.
+- **Fail:** any `(wtf Lite)` WARN or ERROR, fewer modules or keybinds, or a crash.
 
 ## Settings screen
 
-- [ ] Press **Right Shift** in game → the settings screen opens.
-- [ ] Press **Escape** → it closes and you are back where you were.
-- [ ] Type `/wokewtf config` → the same screen opens. (Client commands only exist after joining a world.)
-- [ ] Click outside the screen's panels, on the dark background → nothing closes and nothing changes.
-- [ ] Confirm the sidebar lists **HUD**, **Interface**, **Convenience** and **Global**, each with a module count.
-- [ ] Click **Interface** → its six modules appear on the right with their settings underneath.
-- [ ] Click **Interface** again → the right pane empties and the badge stays.
-- [ ] Type `cross` into the search box → only the Crosshair module remains, its badge reads `1/6`.
-- [ ] Type `größe`, `grosse` and `ß` in turn → the filter treats umlauts and `ß` as their plain letters.
-- [ ] Clear the search → every category comes back.
-- [ ] Search for something that matches nothing → the pane says so and no empty category header is left behind.
-- [ ] Hover a setting label that has a description (e.g. **Position** under the FPS counter) → a tooltip appears. Hovering a label without one shows nothing.
-- [ ] Hover the **Reset** button of a changed setting → its own tooltip appears.
-- [ ] Flip a module's switch → the accent bar appears, the change takes effect at once, and it survives a restart.
-- [ ] Click a boolean setting → it flips between `On` and `Off`.
-- [ ] Drag a slider (e.g. **Thickness**) → the value follows the pointer; a click at the far right of the track lands on the maximum.
-- [ ] Click an enum setting (e.g. **Shape**) → a list opens under it; pick an entry → the list closes and the value is the one you picked.
-- [ ] Press **Escape** with that list still open → the list closes and the screen stays.
-- [ ] Click a colour setting → the swatch steps through the presets and the hex value beside it changes.
-- [ ] Press **Reset** on a setting you changed → it returns to the default, and the config file follows.
-- [ ] Edit the config file by hand while the screen is open, then restart → the file wins, as before.
-- [ ] Check the log for exceptions from `wtf.woke.lite` after all of the above: there should be none.
+### T-01 — Settings screen
 
-### Mod Menu (only if installed)
-
-- [ ] With Mod Menu `17.0.1` installed → the mod list shows **woke.wtf Lite** with a **Configure** button, and the button opens the same screen.
-- [ ] Close that screen → you are back at the mod list, not in the world.
-- [ ] Remove Mod Menu from `mods/` and restart → the mod loads exactly as before; only the button is gone. This is the optional-dependency check.
-- [ ] Confirm the log says nothing about a missing Mod Menu — it must not be a dependency.
-- [ ] Enable the modules under test by editing the config and restarting, and confirm each change survives the restart.
+- **Do:** press **Right Shift**; press **Escape**; run `/wokewtf config`; search
+  `cross`, then `größe` / `grosse` / `ß`; hover a label; drag a slider; open an
+  enum list and press **Escape**; click a colour a few times; press **Reset**;
+  click outside the panels.
+- **Expect:** opens and closes both ways; search narrows the list with a
+  `shown/total` badge and folds umlauts and `ß` to their plain letters; tooltips
+  appear; widgets edit live; **Escape** closes an open list but not the screen;
+  **Reset** restores one setting's default; an outside click does nothing.
+- **Fail:** it will not open or close, edits do nothing, a list traps **Escape**,
+  or **Reset** changes the wrong value.
 
 ## HUD
 
-### `hud.fps` — FPS Counter (on by default)
+### T-02 — `hud.fps` — FPS Counter
 
-- [ ] Join a world → the counter is visible top-left and the number changes.
-- [ ] Press F3 to open the debug overlay → the counter still updates.
-- [ ] Set `showLabel` to `false` → the `FPS: ` prefix disappears, the number stays.
-- [ ] Move `anchor` through all nine positions → the counter follows, never off-screen.
-- [ ] Raise `offsetX`/`offsetY` → it moves away from its corner in both axes.
-- [ ] Set `hud.background` to `false` → the plate disappears but the text stays legible.
+- **Do:** with every module off, enable **FPS Counter**; join a world; press F3;
+  hide `showLabel`; move `anchor` through the corners; raise the offsets.
+- **Expect:** a plate in the chosen corner with a number that keeps changing,
+  including with F3 open; the label can be hidden; it follows the anchor and
+  never leaves the screen.
+- **Fail:** no counter, a frozen number, or it drifts off-screen.
 
 ## Interface
 
-### `ui.crosshair` — Crosshair
+### T-03 — `ui.crosshair` — Crosshair
 
-- [ ] Enable with `style = CROSS` → the vanilla crosshair is replaced by the mod's four-arm one in HUD **and** in third-person.
-- [ ] Set `style = DOT` → a single square replaces it.
-- [ ] Set `style = HIDDEN` → no crosshair at all, in any perspective.
-- [ ] Change `thickness`, `gap` and `length` → each change is immediately visible.
-- [ ] Change `color`; enable `outline` and change `outlineColor` → both are visible against a bright and a dark background.
-- [ ] Disable the module → the vanilla crosshair returns exactly as before.
+- **Do:** enable it; switch `Shape` through **Cross**, **Dot** and **Hidden**;
+  change thickness, gap, arm length, colour and outline.
+- **Expect:** the vanilla crosshair is replaced in first- and third-person;
+  every edit is visible at once; **Hidden** removes it entirely; disabling
+  restores vanilla exactly.
+- **Fail:** both crosshairs draw, changes need a restart, or the vanilla one is
+  gone while the module is off.
 
-### `ui.chat` — Chat
+### T-04 — `ui.chat` — Chat
 
-- [ ] Enable `timestamps` → every new line is prefixed with the local time.
-- [ ] Switch `timestampStyle` HOUR_MINUTE ↔ HOUR_MINUTE_SECOND → the prefix changes shape.
-- [ ] Set `historyLength` to its maximum → scrolling up in chat reaches further back than vanilla's 100 lines.
-- [ ] Set `historyLength` to its minimum → the scrollback is shorter than vanilla's.
-- [ ] Disable the module → new lines have no prefix again.
+- **Do:** enable it; send a line; switch `Timestamp Format`; set `History
+  Length` to its maximum, then its minimum, scrolling back each time.
+- **Expect:** new lines carry the local time in the chosen shape; the scrollback
+  is longer, then shorter, than vanilla's 100 lines; disabling removes the prefix.
+- **Fail:** no prefix, a wrong or doubled prefix, or the history length ignored.
 
-### `ui.book` — Book Page Counter
+### T-05 — `ui.book` — Book Page Counter
 
-- [ ] Enable, then open a writable book → a counter appears with the page's character count.
-- [ ] Type into the page → the counter follows the edit live.
-- [ ] Switch `counter` used ↔ remaining → the number changes to the complement.
-- [ ] In a signed book (read-only) → the counter still appears.
-- [ ] Close the book → the counter disappears.
-- [ ] Change `color` → the counter's colour changes.
+- **Do:** enable it; open a writable book and type on a page; open a signed
+  (read-only) book; switch `Counter Style` used ↔ remaining; close the book.
+- **Expect:** a counter shows characters used or left, follows typing live, and
+  appears for both book kinds; it disappears when the book closes.
+- **Fail:** no counter, a stale count, or it lingers after closing.
 
-### `ui.screenshot` — Screenshot Helper
+### T-06 — `ui.screenshot` — Screenshot Helper
 
-- [ ] Enable `copyPath` and `notify`, then press F2 → a file appears in `screenshots/`, chat says a screenshot was saved, and pasting puts the file path on the clipboard.
-- [ ] Enable `shareLink` → pressing F2 copies a `file://` link instead, and the chat wording changes.
-- [ ] Paste the `file://` link into a browser or file manager → the image opens.
-- [ ] Set `copyPath` to `false` → the clipboard is left untouched.
-- [ ] Set `notify` to `false` → chat stays silent.
-- [ ] Take two screenshots in a row → each is reported exactly once, never twice.
-- [ ] Confirm nothing was uploaded: no network activity from the mod.
+- **Do:** enable it with `Copy Path` and `Chat Notification`; press F2; enable
+  `Share Link` and press F2 again; then turn both off and press F2.
+- **Expect:** each F2 writes one file to `screenshots/` and says so once; the
+  clipboard holds the path, then a `file://` link; with both off the clipboard is
+  untouched.
+- **Fail:** no file, a doubled message per press, a clipboard that never changes,
+  or any network activity.
 
-### `ui.waypoints` — Waypoints
+### T-07 — `ui.waypoints` — Waypoints
 
-- [ ] Enable, then `/wokewtf waypoint add home` → chat confirms and the waypoint appears in the HUD list with a distance.
-- [ ] `/wokewtf waypoint list` → the header and every entry appear, nearest first.
-- [ ] Walk 100 blocks → the listed distance updates.
-- [ ] `/wokewtf waypoint remove home` → it disappears from the HUD and the list.
-- [ ] `/wokewtf waypoint add home` twice → the second is refused as a duplicate.
-- [ ] Add a 25-character name and a name containing `|` → both are refused with a reason.
-- [ ] Fill all 64 slots → one more is refused as full.
-- [ ] Set `showCoordinates = false` then `true` → the coordinate triple appears and disappears.
-- [ ] Change `maxShown`, `anchor`, `offsetX`, `offsetY` → the list is capped and repositioned.
-- [ ] Restart the game → every waypoint is still there.
-- [ ] Enter a different world → that world's waypoints are shown, not the previous world's.
-- [ ] Disable and re-enable the module → the list comes back unchanged.
+- **Do:** enable it; `/wokewtf waypoint add home`; walk about 100 blocks;
+  `/wokewtf waypoint list`; `/wokewtf waypoint remove home`; add it again;
+  restart; enter another world.
+- **Expect:** the HUD lists it with a live distance; duplicates, over-long names
+  and `|` are refused with a reason; `remove` drops it; the list survives a
+  restart and is per-world.
+- **Fail:** a waypoint lost on restart, a wrong distance, or names leaking
+  between worlds.
 
-### `ui.inventory_sort` — Inventory Sort
+### T-08 — `ui.inventory_sort` — Inventory Sort
 
-- [ ] In singleplayer with the module enabled, `/wokewtf sort` → stacks are reordered and chat reports how many moved.
-- [ ] Count your items before and after → the multiset is identical; nothing is merged, spawned or lost.
-- [ ] Sort again immediately → the second run reports the inventory is already sorted.
-- [ ] Switch `order` NAME ↔ COUNT → the resulting arrangement matches the setting.
-- [ ] Enable `includeHotbar` → the hotbar is reordered too.
-- [ ] Start a sort and leave the world mid-run → the sort stops and does not resume.
-- [ ] Join a server somebody else runs → the module is unavailable and `/wokewtf sort` says why.
-- [ ] Sort with a container screen open → it refuses rather than clicking in the wrong window.
+- **Do:** in singleplayer, enable it; fill your inventory; `/wokewtf sort`; count
+  items before and after; sort again; switch `Order` and `Include Hotbar`; join a
+  server someone else runs and try `/wokewtf sort`.
+- **Expect:** stacks are reordered with an identical item multiset; a second run
+  says already sorted; the settings change the arrangement; on a foreign server
+  it refuses and says why.
+- **Fail:** items lost, merged or duplicated; sorting works on a remote server;
+  `Include Hotbar` ignored.
 
 ## Convenience
 
-### `util.auto_reconnect` — Auto Reconnect (off by default)
+### T-09 — `util.auto_reconnect` — Auto Reconnect
 
-- [ ] Leave it off, kill the connection → nothing happens. This is the default and the most important check here.
-- [ ] Enable it, bind "Cancel Reconnect", join a server and restart that server → a countdown is printed in chat, one line per second.
-- [ ] Press the cancel keybind during the countdown → chat says it was cancelled and no connection is attempted.
-- [ ] Let the countdown run out → the connect screen appears and you rejoin the server.
-- [ ] Disconnect deliberately (Quit to title) → the countdown does **not** start.
-- [ ] Disconnect from a singleplayer world → nothing happens.
-- [ ] Get kicked by a server operator → at most one reconnect attempt, which the server is free to refuse, and **no repeat attempts afterwards**.
-- [ ] Set `countdownSeconds` to minimum and maximum → the countdown honours both bounds.
-- [ ] Confirm the mod never reconnects without a visible countdown first.
+- **Do:** leave it off and kill the connection; then enable it, bind **Cancel
+  Reconnect**, and drop the connection; press the cancel key during the
+  countdown; let it run out; quit to title deliberately.
+- **Expect:** off → nothing; on → one countdown line per second, cancellable,
+  then one reconnect attempt; a deliberate quit or a singleplayer drop does not
+  start it; there is no retry loop.
+- **Fail:** it reconnects with no countdown, retries in a loop, or ignores the
+  cancel keybind.
 
-### `util.respawn_confirm` — Respawn Confirmation
+### T-10 — `util.respawn_confirm` — Respawn Confirmation
 
-- [ ] Enable with a 3-second hold, then die → the respawn button is inactive and shows how long is left.
-- [ ] Wait it out → the button returns to its normal label and works.
-- [ ] Click the button during the hold → nothing happens; you do not respawn.
-- [ ] Leave the death screen open through the whole hold → the button becomes usable on its own.
-- [ ] Die in hardcore mode → the Spectate button is **not** touched.
-- [ ] Disable the module → the respawn button is instant again.
+- **Do:** enable it with a 3-second hold; die; click the respawn button during
+  the hold; wait it out; die in hardcore; disable it and die again.
+- **Expect:** the button is inactive and shows the remaining seconds, then
+  becomes usable; the hardcore **Spectate** button is untouched; when disabled
+  respawn is instant.
+- **Fail:** you respawn during the hold, the button stays stuck, or **Spectate**
+  is disabled.
 
-### `util.chat_macros` — Chat Macros (off by default)
+### T-11 — `util.chat_macros` — Chat Macros
 
-- [ ] `/wokewtf macro set greet Hello there` → chat confirms the macro was saved.
-- [ ] `/wokewtf macro list` → `greet` is listed as slot 1.
-- [ ] Bind "Chat Macro 1", enable the module, press the key in-game → the chat box opens with `Hello there` already in it.
-- [ ] Press Escape → nothing is sent.
-- [ ] Press the key again and press Enter → the line is sent exactly once.
-- [ ] With the module **off**, press the key → nothing opens.
-- [ ] Press a key whose slot is empty → chat says no macro is in that slot.
-- [ ] `/wokewtf macro set greet Changed` → slot 1 now types `Changed`.
-- [ ] Try a 33-character name and a 257-character line → both are refused with a reason.
-- [ ] Add 20 macros, then try a 21st → refused as full.
-- [ ] `/wokewtf macro remove greet` → slot 2's macro shifts up into slot 1.
-- [ ] Restart the game → macros and their keybinds are unchanged.
+- **Do:** `/wokewtf macro set greet Hello there`; `/wokewtf macro list`; bind
+  **Chat Macro 1**; enable the module; press the key; press **Escape**; press it
+  again and **Enter**; switch the module off and press it; press an empty slot;
+  `/wokewtf macro remove greet`.
+- **Expect:** the chat box opens prefilled, nothing is sent until **Enter**; off
+  or an empty slot says so; removing a macro shifts the rest up.
+- **Fail:** a line is sent without **Enter**, it opens while off, or the wrong
+  slot's text appears.
 
-### `util.screenshot_key` — Screenshot Key (off by default)
+### T-12 — `util.screenshot_key` — Screenshot Key
 
-- [ ] Bind "Take Screenshot", enable the module, press the key → a screenshot is saved and chat reports it.
-- [ ] Enable `ui.screenshot` too → the new file is also offered on the clipboard.
-- [ ] Disable the module → the key does nothing.
-- [ ] Confirm the resulting file is identical in naming and location to an F2 screenshot.
+- **Do:** bind **Take Screenshot**; enable the module; press it; also enable
+  `ui.screenshot` and press again; disable and press.
+- **Expect:** each press saves one screenshot, identical to an F2 shot; the
+  helper also offers it on the clipboard; nothing happens when disabled.
+- **Fail:** no file, two files per press, or it still fires when disabled.
 
-### `util.fullscreen_key` — Fullscreen Key (off by default)
+### T-13 — `util.fullscreen_key` — Fullscreen Key
 
-- [ ] Bind "Toggle Fullscreen", enable the module, press the key → the window toggles.
-- [ ] Press it again → it toggles back, and the window size is restored.
-- [ ] Disable the module → the key does nothing.
+- **Do:** bind **Toggle Fullscreen**; enable the module; press it twice;
+  disable and press.
+- **Expect:** the window toggles both ways and restores its size; nothing
+  happens when disabled.
+- **Fail:** the window does not restore, or the key still fires when disabled.
 
-### `util.stats` — Local Stats
+### T-14 — `util.stats` — Local Stats
 
-- [ ] Enable, then `/wokewtf stats` → three counters and a formatted playtime are shown.
-- [ ] Break a block → the mined count goes up by one.
-- [ ] Let another player break a block in front of you → the count does **not** move.
-- [ ] Walk a known distance → the walked figure grows by roughly that much.
-- [ ] Teleport (`/tp`) → the walked figure does **not** jump.
-- [ ] Fly, swim and fall → decide what you consider correct and write down what actually happened.
-- [ ] Restart the game → the counters continue from where they were.
-- [ ] `/wokewtf stats reset` → all counters return to zero and stay there.
-- [ ] Confirm no stats leave the machine: no upload, no chat announcement, no server traffic.
+- **Do:** enable it; `/wokewtf stats`; break a block; have another player break
+  one nearby; walk a known distance; `/tp`; restart; `/wokewtf stats reset`.
+- **Expect:** blocks-mined rises by one per block **you** break; distance grows
+  by roughly what you walked and ignores teleports; counters persist across a
+  restart and return to zero on reset.
+- **Fail:** another player's block counts, a teleport inflates distance, or a
+  reset does not stick.
 
-## Across every module
+## Across modules
 
-- [ ] Bind two of the mod's keybinds to the same key, then join a world → chat reports the conflict and names the key.
-- [ ] Check that a conflict is reported again after a restart.
-- [ ] Turn on several modules at once → they do not interfere; the HUD stays readable.
-- [ ] Edit `config/wokewtf-lite.json` by hand: change a value → it is honoured on the next launch.
-- [ ] Corrupt that file on purpose → it is quarantined as `.corrupt-…`, the game starts with defaults, and the log says why.
-- [ ] Set `schemaVersion` to `99` → the mod refuses to overwrite the file and says so.
-- [ ] With a world loaded, confirm `stats` writes reach the file within about half a minute.
-- [ ] Check the log for exceptions from `wtf.woke.lite` at the end of the session: there should be none.
+### T-15 — Keybind conflicts and coexistence
+
+- **Do:** in **Options → Controls**, set **Open Settings** and one other mod
+  binding (e.g. **Chat Macro 1**) to the same key, e.g. **F1**; join a world;
+  restart and rejoin; then enable several modules at once.
+- **Expect:** one chat line per conflict naming the key and saying to rebind; the
+  same is reported again after a restart; a pair of **vanilla** bindings that
+  share a key (the debug keys on A, S, D …) is **never** reported; busy modules
+  do not interfere and the HUD stays readable.
+- **Fail:** vanilla-only pairs appear in chat or in the log, a real conflict
+  involving one of our keys stays silent, or two modules fight for the screen.
+
+## After the session
+
+- [ ] The log has no exception from `wtf.woke.lite` after all of the above.
+- [ ] Your own settings are in `run/config/wokewtf-lite.json.test-session-backup`
+      if you want them back.

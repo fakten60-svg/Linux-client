@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Finds two bindings that want the same key.
@@ -70,5 +71,37 @@ public final class KeybindConflicts {
             }
         });
         return List.copyOf(conflicts);
+    }
+
+    /**
+     * Like {@link #find(Map)}, but keeps only the conflicts that matter to the
+     * caller: those where at least one owner is named in {@code ours}.
+     *
+     * <p>Vanilla ships several bindings that deliberately share a key (the debug
+     * keys sit on the movement keys, for one), and the game fires all of them
+     * without a word. Reporting those pairs would bury the one line that is
+     * actually actionable, so a pair nobody in {@code ours} is part of is
+     * dropped here instead of being filtered at the call site.</p>
+     *
+     * @param ownerToKey binding owner to the key it is bound to
+     * @param ours       owners whose conflicts are worth reporting
+     * @return the conflicts with at least one owner in {@code ours}
+     */
+    public static List<Conflict> involving(Map<String, String> ownerToKey, Set<String> ours) {
+        Objects.requireNonNull(ownerToKey, "ownerToKey");
+        Objects.requireNonNull(ours, "ours");
+        if (ours.isEmpty()) {
+            return List.of();
+        }
+        List<Conflict> kept = new ArrayList<>();
+        for (Conflict conflict : find(ownerToKey)) {
+            for (String owner : conflict.owners()) {
+                if (ours.contains(owner)) {
+                    kept.add(conflict);
+                    break;
+                }
+            }
+        }
+        return List.copyOf(kept);
     }
 }
