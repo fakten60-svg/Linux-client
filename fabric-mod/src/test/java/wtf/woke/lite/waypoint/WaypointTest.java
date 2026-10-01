@@ -54,6 +54,20 @@ class WaypointTest {
     }
 
     @Test
+    void namesRejectWhatTheGameItselfWouldRefuse() {
+        // § opens a formatting code, and control characters break the HUD line
+        // the name is drawn into. Vanilla refuses both at the keyboard.
+        assertFalse(Waypoint.isValidName("bad\u00A7name"), "section sign");
+        assertFalse(Waypoint.isValidName("bad\nname"), "newline");
+        assertFalse(Waypoint.isValidName("tab\there"), "tab");
+        assertFalse(Waypoint.isValidName("del\u007F"), "DEL");
+
+        // What the game does accept still has to work: spaces, umlauts, digits.
+        assertTrue(Waypoint.isValidName("Base 2"));
+        assertTrue(Waypoint.isValidName("grüße"));
+    }
+
+    @Test
     void theWorstCaseNameAndPositionStillFitTheStoredEntry() {
         // The config truncates an over-long entry instead of refusing it, and a
         // truncated entry is an unreadable one, so this is the ceiling the

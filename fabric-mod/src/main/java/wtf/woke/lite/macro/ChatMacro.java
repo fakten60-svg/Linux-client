@@ -2,6 +2,7 @@ package wtf.woke.lite.macro;
 
 import java.util.Objects;
 import java.util.Optional;
+import wtf.woke.lite.core.Validator;
 
 /**
  * One saved chat line, waiting behind a keybind.
@@ -75,14 +76,19 @@ public record ChatMacro(String name, String text) {
         return name != null
                 && !name.isBlank()
                 && name.length() <= MAX_NAME_LENGTH
-                && name.indexOf(SEPARATOR) < 0;
+                && name.indexOf(SEPARATOR) < 0
+                && Validator.isGameSafeText(name);
     }
 
     /**
      * @param text the candidate chat line
-     * @return whether the line is short enough and not blank
+     * @return whether the line is short enough, not blank, and only carries
+     *         characters the game itself would accept in chat
      */
     public static boolean isValidText(String text) {
-        return text != null && !text.isBlank() && text.length() <= MAX_TEXT_LENGTH;
+        return text != null
+                && !text.isBlank()
+                && text.length() <= MAX_TEXT_LENGTH
+                && Validator.isGameSafeText(text);
     }
 }

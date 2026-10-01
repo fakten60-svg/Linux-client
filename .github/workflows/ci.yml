@@ -80,7 +80,7 @@ jobs:
             symbols=$(nm -D --defined-only "build/$preset/libwoke.so" \
               | awk '{print $3}' | sort | tr '\n' ' ')
             echo "$preset exports: $symbols"
-            if [ "$symbols" != "JNI_OnLoad JNI_OnUnLoad " ]; then
+            if [ "$symbols" != "JNI_OnLoad JNI_OnUnload " ]; then
               echo "::error::unexpected export surface in $preset"
               exit 1
             fi

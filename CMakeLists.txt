@@ -12,7 +12,7 @@
 cmake_minimum_required(VERSION 3.27)
 
 project(woke
-    VERSION 0.1.0
+    VERSION 1.0.0
     DESCRIPTION "woke.wtf — native injection utility client (private testing scope)"
     LANGUAGES C CXX)
 

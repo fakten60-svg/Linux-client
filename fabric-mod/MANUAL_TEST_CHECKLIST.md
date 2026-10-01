@@ -12,7 +12,7 @@ left, and its job is to be the honest counterpart to a green build.
 - [ ] Start the client with `scripts/test_session.sh`: it resets
       `run/config/wokewtf-lite.json` so **every module is off** — the baseline
       assumed below.
-- [ ] In `run/logs/latest.log`, confirm `woke.wtf Lite v0.1.0 ready: 13 modules
+- [ ] In `run/logs/latest.log`, confirm `woke.wtf Lite v1.0.0 ready: 13 modules
       (0 enabled), 24 keybinds` and `Registered modules: hud.fps, … util.stats`.
 - [ ] **Options → Controls** shows a `woke.wtf Lite` category with 24 bindings.
 - [ ] Client commands (`/wokewtf …`) exist only after you join a world.

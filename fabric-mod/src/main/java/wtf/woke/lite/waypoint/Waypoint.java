@@ -2,6 +2,7 @@ package wtf.woke.lite.waypoint;
 
 import java.util.Objects;
 import java.util.Optional;
+import wtf.woke.lite.core.Validator;
 
 /**
  * One named position, remembered for one world.
@@ -83,13 +84,15 @@ public record Waypoint(String name, int x, int y, int z, String worldKey) {
 
     /**
      * @param name the candidate name
-     * @return whether the name can be stored and encoded again unchanged
+     * @return whether the name can be stored and encoded again unchanged, and
+     *         only carries characters the game itself would render
      */
     public static boolean isValidName(String name) {
         return name != null
                 && !name.isBlank()
                 && name.length() <= MAX_NAME_LENGTH
-                && name.indexOf(SEPARATOR) < 0;
+                && name.indexOf(SEPARATOR) < 0
+                && Validator.isGameSafeText(name);
     }
 
     /** @return the encoded form's length, i.e. how much config space it takes */

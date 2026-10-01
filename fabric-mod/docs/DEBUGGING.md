@@ -18,7 +18,7 @@ appenders render that name differently, so both spellings are ours:
 
 | File | Tag | Example |
 | --- | --- | --- |
-| `latest.log` | `(wtf Lite)` | `[10:12:04] [Render thread/INFO] (wtf Lite) woke.wtf Lite v0.1.0 ready: 13 modules (1 enabled), 24 keybinds, config loaded` |
+| `latest.log` | `(wtf Lite)` | `[10:12:04] [Render thread/INFO] (wtf Lite) woke.wtf Lite v1.0.0 ready: 13 modules (1 enabled), 24 keybinds, config loaded` |
 | `debug.log` | `(woke.wtf Lite)` | `[10:12:04] [Render thread/DEBUG] (woke.wtf Lite) watch 'hud.fps' tick: enabled=true, active=true` |
 
 It is one logger, `"woke.wtf Lite"`; `latest.log` simply shortens the name at
@@ -34,7 +34,7 @@ before deciding anything was our fault.
 Two startup lines say the mod is loaded and what it found:
 
 ```
-woke.wtf Lite v0.1.0 ready: 13 modules (N enabled), 24 keybinds, config ...
+woke.wtf Lite v1.0.0 ready: 13 modules (N enabled), 24 keybinds, config ...
 Registered modules: hud.fps, ui.crosshair, ... util.stats
 ```
 

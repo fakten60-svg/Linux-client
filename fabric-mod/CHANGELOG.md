@@ -4,7 +4,7 @@ All notable changes to the Fabric mod in this directory. The format is kept
 plain on purpose; the interesting part of an entry is what a player notices and
 what was verified, not the versioning scheme.
 
-## 0.1.0 — unreleased
+## 1.0.0
 
 The first release: thirteen QoL modules, all opt-in, for Minecraft 1.21.11 on
 Fabric. Nothing here changes what another player sees, and nothing here gives a
@@ -30,7 +30,7 @@ gameplay advantage — see [docs/SCOPE.md](docs/SCOPE.md).
 - **Client commands** `/wokewtf config`, `waypoint`, `sort`, `macro`, `stats` —
   parsed and answered by your own client, never sent to a server.
 - **First-join chat guide**, printed once per session, with English and German
-  text (`en_us.json`, `de_de.json`).
+  text (`en_us.json`, `de_de.json`). It follows the game language automatically.
 - **Keybind conflict report**: if one of this mod's bindings shares a key with
   anything else, the mod says so on world join. Vanilla pairs that collide on
   purpose are never reported.
@@ -40,8 +40,20 @@ gameplay advantage — see [docs/SCOPE.md](docs/SCOPE.md).
 - **Debug Module** setting and `scripts/parse_session_log.sh`, for reading a
   session back afterwards — see [docs/DEBUGGING.md](docs/DEBUGGING.md).
 
+### Fixed
+
+- Macro names/text and waypoint names now reject what the game itself refuses:
+  the section sign (which opens a formatting code), control characters and DEL.
+  Previously a macro could carry a newline into the chat box and a waypoint name
+  could carry a colour code into the HUD. Rule lives in `Validator.isGameSafeText`
+  and mirrors vanilla's `SharedConstants.isValidChar`.
+
 ### Notes
 
-- Modules were added one group at a time, and every one is opt-in: a fresh
-  install switches nothing on except the read-only FPS counter.
-- The schema version is `1`, and the modules added since are purely additive.
+- Every module is opt-in: a fresh install switches nothing on except the
+  read-only FPS counter.
+- The config schema version is `1`, and every module added since is purely
+  additive.
+
+See the repository's top-level `CHANGELOG.md` for the C++ side and the release
+as a whole.

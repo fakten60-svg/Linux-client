@@ -70,6 +70,26 @@ class ChatMacroListTest {
     }
 
     @Test
+    void namesAndTextRejectWhatTheGameItselfWouldRefuse() {
+        // § opens a formatting code and control characters cannot be typed into
+        // the chat box at all, so neither may be stored and typed back later.
+        assertFalse(ChatMacro.isValidName("bad\u00A7name"), "name with section sign");
+        assertFalse(ChatMacro.isValidName("bad\nname"), "name with newline");
+        assertFalse(ChatMacro.isValidName("tab\there"), "name with tab");
+
+        assertFalse(ChatMacro.isValidText("hello\nworld"), "text with newline");
+        assertFalse(ChatMacro.isValidText("\u00A7cred"), "text with formatting code");
+        assertFalse(ChatMacro.isValidText("bell\u0007"), "text with BEL");
+        assertFalse(ChatMacro.isValidText("del\u007F"), "text with DEL");
+
+        // Ordinary chat text, including spaces and non-ASCII, still works.
+        assertTrue(ChatMacro.isValidName("grüße"));
+        assertTrue(ChatMacro.isValidText("grüße aus münchen — hi there"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ChatMacro("name", "line\nbreak"));
+    }
+
+    @Test
     void storesAndReplacesByName() {
         Setting<List<String>> entries = emptySetting();
 

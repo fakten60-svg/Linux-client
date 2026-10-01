@@ -49,10 +49,40 @@ namespace {
 
 constexpr long kDefaultBootTimeoutMs = 30000;
 
-JavaVM *volatile g_vm                 = nullptr;
-volatile bool    g_jvm_ready          = false;
-volatile bool    g_bootstrap_complete = false;
-pthread_t        g_bootstrap_thread   = {};
+// Shared between the constructor's bootstrap thread and JNI_OnLoad. These are
+// std::atomic, not `volatile`: volatile only stops the compiler folding the
+// accesses, it does nothing at all for two threads racing on them. This was
+// literally `volatile` until ThreadSanitizer flagged g_vm and g_jvm_ready being
+// written from both sides with no synchronisation.
+std::atomic<JavaVM *>  g_vm{nullptr};
+std::atomic<bool>      g_jvm_ready{false};
+std::atomic<bool>      g_bootstrap_complete{false};
+std::atomic<pthread_t> g_bootstrap_thread{pthread_t{}};
+
+// Teardown has to wait for the bootstrap thread to stop touching the
+// subsystems before they are shut down. The thread itself is detached (so a
+// library that is never unloaded retains nothing), which rules out
+// pthread_join — so it signals this condition variable instead, exactly once,
+// on every exit path.
+//
+// pthread primitives with static initialisers, not std::mutex /
+// std::condition_variable: the latter own a destructor that runs at static
+// destruction time, and that destructor races the detached thread's final
+// signal (ThreadSanitizer caught exactly this). These have no destructor, so
+// there is nothing to race. Same reason thread_dispatch.cpp uses them.
+pthread_mutex_t g_bootstrap_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t  g_bootstrap_wait       = PTHREAD_COND_INITIALIZER;
+bool            g_bootstrap_finished   = false;   // guarded by the mutex
+
+/** RAII: announces that the bootstrap thread is finished, on any exit path. */
+struct SignalBootstrapDone {
+    ~SignalBootstrapDone() {
+        pthread_mutex_lock(&g_bootstrap_wait_mutex);
+        g_bootstrap_finished = true;
+        pthread_mutex_unlock(&g_bootstrap_wait_mutex);
+        pthread_cond_broadcast(&g_bootstrap_wait);
+    }
+};
 
 // ---------------------------------------------------------------------------
 // Dispatch demonstration task — executed on the dedicated worker thread.
@@ -169,6 +199,7 @@ void run_jvm_chain(JavaVM *vm) {
 
 /// Bootstrap thread body: wait for the JVM, then run the init chain.
 void *bootstrap_main(void *) {
+    SignalBootstrapDone signal_done;
     log::info(kTag, "bootstrap thread running (pid=%d tid=%lu)", getpid(),
               static_cast<unsigned long>(pthread_self()));
 
@@ -176,7 +207,7 @@ void *bootstrap_main(void *) {
         dlsym(RTLD_DEFAULT, "JNI_GetCreatedJavaVMs"));
     if (get_created_vms == nullptr) {
         log::warn(kTag, "JNI_GetCreatedJavaVMs not resolvable — not a JVM process?");
-        g_bootstrap_complete = true;
+        g_bootstrap_complete.store(true, std::memory_order_release);
         return nullptr;
     }
 
@@ -192,7 +223,7 @@ void *bootstrap_main(void *) {
         }
         if (waited_ms >= timeout_ms) {
             log::warn(kTag, "no JVM appeared within %ld ms — idling passively", timeout_ms);
-            g_bootstrap_complete = true;
+            g_bootstrap_complete.store(true, std::memory_order_release);
             return nullptr;
         }
         const timespec ts = {0, kPollMs * 1000 * 1000L};
@@ -200,11 +231,11 @@ void *bootstrap_main(void *) {
         waited_ms += kPollMs;
     }
 
-    g_vm = vm;
+    g_vm.store(vm, std::memory_order_release);
     log::info(kTag, "JVM discovered — running init chain");
     run_jvm_chain(vm);
-    g_jvm_ready = true;
-    g_bootstrap_complete = true;
+    g_jvm_ready.store(true, std::memory_order_release);
+    g_bootstrap_complete.store(true, std::memory_order_release);
     return nullptr;
 }
 
@@ -214,22 +245,29 @@ void *bootstrap_main(void *) {
 // Public accessors (used by later-phase subsystems)
 // ---------------------------------------------------------------------------
 
-JavaVM *java_vm() { return g_vm; }
-bool jvm_ready() { return g_jvm_ready; }
-bool bootstrap_complete() { return g_bootstrap_complete; }
+JavaVM *java_vm() { return g_vm.load(std::memory_order_acquire); }
+bool jvm_ready() { return g_jvm_ready.load(std::memory_order_acquire); }
+bool bootstrap_complete() { return g_bootstrap_complete.load(std::memory_order_acquire); }
 
 void set_jvm(JavaVM *vm) {
     if (vm != nullptr) {
-        g_vm = vm;
-        g_jvm_ready = true;
+        g_vm.store(vm, std::memory_order_release);
+        g_jvm_ready.store(true, std::memory_order_release);
     }
 }
 
 void join_bootstrap() {
-    if (g_bootstrap_thread != pthread_t{}) {
-        pthread_join(g_bootstrap_thread, nullptr);
-        g_bootstrap_thread = pthread_t{};
+    // Detached, so there is no pthread_join to call: wait for the handshake
+    // instead. Joining a detached thread is undefined and fails outright.
+    if (g_bootstrap_thread.load(std::memory_order_acquire) == pthread_t{}) {
+        return;   // never spawned — nothing to wait for
     }
+    pthread_mutex_lock(&g_bootstrap_wait_mutex);
+    while (!g_bootstrap_finished) {
+        pthread_cond_wait(&g_bootstrap_wait, &g_bootstrap_wait_mutex);
+    }
+    pthread_mutex_unlock(&g_bootstrap_wait_mutex);
+    g_bootstrap_thread.store(pthread_t{}, std::memory_order_release);
 }
 
 } // namespace woke
@@ -267,12 +305,18 @@ static void woke_constructor() {
     woke::event_bus::subscribe<woke::event_bus::ClientStartedEvent>(&woke::on_client_started);
 
     // Stage 4+: JVM wait and chain — on the bootstrap thread.
-    const int rc = pthread_create(&woke::g_bootstrap_thread, nullptr, &woke::bootstrap_main, nullptr);
+    // Detached, so a library that is never unloaded retains no thread resource;
+    // teardown still waits for it through the handshake in join_bootstrap().
+    // This used to detach *and* join, which is undefined — pthread_join on a
+    // detached thread fails outright, so teardown never actually waited.
+    pthread_t thread = pthread_t{};
+    const int rc = pthread_create(&thread, nullptr, &woke::bootstrap_main, nullptr);
     if (rc != 0) {
         woke::log::error(woke::kTag, "bootstrap thread spawn failed (%s)", std::strerror(rc));
         return;
     }
-    pthread_detach(woke::g_bootstrap_thread);
+    woke::g_bootstrap_thread.store(thread, std::memory_order_release);
+    pthread_detach(thread);
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +331,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void * /*reserved*/) {
     return JNI_VERSION_1_8;
 }
 
-JNIEXPORT void JNICALL JNI_OnUnLoad(JavaVM * /*vm*/, void * /*reserved*/) {
+// The JNI entry point is `JNI_OnUnload` — lowercase "load". It used to be
+// spelled JNI_OnUnLoad, which the JVM looks up under the exact spec name and so
+// never finds: this whole teardown silently never ran.
+JNIEXPORT void JNICALL JNI_OnUnload(JavaVM * /*vm*/, void * /*reserved*/) {
     woke::join_bootstrap();
     woke::dispatch::shutdown();
     woke::jvm::GameContext::shutdown();
@@ -295,7 +342,7 @@ JNIEXPORT void JNICALL JNI_OnUnLoad(JavaVM * /*vm*/, void * /*reserved*/) {
     woke::jvm::BaseJNIHook::shutdown();
     woke::jvm::mappings::unload();
     woke::hooks::shutdown();
-    woke::log::info("jni", "JNI_OnUnLoad: subsystems released, libwoke.so detaching");
+    woke::log::info("jni", "JNI_OnUnload: subsystems released, libwoke.so detaching");
     woke::log::shutdown();
 }
 

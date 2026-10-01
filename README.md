@@ -106,6 +106,47 @@ JVM fails the job instead of stalling the runner. The baseline screenshot is
 uploaded as a build artifact, so a palette regression can be looked at rather
 than only read about.
 
+## Linux Build & Install
+
+What the build produces, and what to do with it.
+
+| Artifact | Built by | What it is |
+| --- | --- | --- |
+| `build/linux-release/libwoke.so` | `cmake --build --preset linux-release` | The JNI agent: logging, JVM discovery/reflection, event bus, thread dispatch, hook engine. |
+| `build/linux-release/woketool` | same | Standalone UI harness — renders the theme/components and pixel-checks itself. |
+| `build/linux-release/woke_unit_tests` | same (with `WOKE_BUILD_TESTS=ON`) | The dependency-free unit suite; run it through `ctest`. |
+
+**Installing `libwoke.so`** — it is a JNI agent, not a linkable library. Put it
+somewhere the JVM can find it and load it, either explicitly:
+
+```java
+System.load("/opt/woke/libwoke.so");       // JNI_OnLoad runs the init chain
+System.loadLibrary("woke");                // if it is on java.library.path
+```
+
+or early, before the JVM exists, via `LD_PRELOAD=/opt/woke/libwoke.so`; the
+constructor spawns a bootstrap thread that polls `JNI_GetCreatedJavaVMs` and
+runs the same chain once a JVM appears.
+
+**There are no public headers to install.** The exported surface is exactly two
+symbols — `JNI_OnLoad` and `JNI_OnUnload`, pinned by `src/woke.ld` and asserted
+by CI — so there is no C API to link against. Everything under `src/` is
+internal; `src/entry.h` and friends are not a stable interface.
+
+**Running `woketool`** — no GLFW install needed: GLFW and Dear ImGui are linked
+in statically. The remaining runtime dependencies are glibc, libstdc++ and the
+GL loader (`libOpenGL`/`libGLdispatch`):
+
+```sh
+./build/linux-release/woketool --verify --frames 60 --park-mouse
+```
+
+**Release artifacts** are the two binaries above, stripped, plus the mod jar
+and a `SHA256SUMS` covering all three. Redistribution of `libwoke.so` requires
+redistributing funchook's licence text alongside it — see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for why, and what else is
+linked in.
+
 ## Project Layout
 
 ```
@@ -325,4 +366,5 @@ Members absent from the target build are reported and omitted — never guessed.
 
 ## Version Control
 
-Branching: `main` (stable) ← `develop` ← `feat/<system>`. Releases tagged `v0.x.y`.
+Branching: `main` (stable) ← `develop` ← `feat/<system>`. Releases tagged
+`v1.0.0` and up; see `CHANGELOG.md`.

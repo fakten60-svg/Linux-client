@@ -22,6 +22,33 @@ public interface Validator<T> {
      */
     T sanitize(T candidate);
 
+    /**
+     * The game's own rule for text it will render or accept: no section sign
+     * (which starts a formatting code), no control character, no DEL.
+     *
+     * <p>This mirrors vanilla's {@code SharedConstants.isValidChar}, and is why
+     * user-supplied names and chat lines are checked against it: a name we
+     * happily store can otherwise smuggle in a newline or a colour code that
+     * the game itself would have refused at the keyboard, and it then renders
+     * as broken HUD text or spoofed formatting.</p>
+     *
+     * @param text the candidate text; may be {@code null}
+     * @return whether every character is one the game itself accepts
+     */
+    static boolean isGameSafeText(String text) {
+        if (text == null) {
+            return false;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            // 0xA7 is '§', 0x7F is DEL; everything below 0x20 is a control char.
+            if (c == 0xA7 || c < 0x20 || c == 0x7F) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** Clamps an integer into {@code [min, max]}; {@code null} stays rejected. */
     static Validator<Integer> clampInt(int min, int max) {
         if (min > max) {

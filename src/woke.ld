@@ -1,7 +1,7 @@
 {
   global:
     JNI_OnLoad;
-    JNI_OnUnLoad;
+    JNI_OnUnload;
   local:
     *;
 };
