@@ -7,7 +7,7 @@ what neither can.
 | --- | --- | --- |
 | Unit suite | Everything that needs no game: config round-trips, the reconnect state machine, counters, macro rules, search folding, the mixin contract | `./gradlew test` |
 | Client gametest | What is drawn: HUD placement and colour, the chat timestamp, the settings screen | `./gradlew runClientGameTest` |
-| Manual checklist | Real input, real timing, other players, everything that needs hands | `MANUAL_TEST_CHECKLIST.md` |
+| Manual checklist | Real input, real timing, other players, everything that needs hands | [MANUAL_TEST_CHECKLIST.md](../MANUAL_TEST_CHECKLIST.md) |
 
 ## The client gametest
 
@@ -72,6 +72,12 @@ Two things to know if it stalls:
 
 Anything requiring real input or another player: pressing a key that is not
 dispatched by the test, dragging a slider, hovering a tooltip, a server that
-refuses a connection. Those are what `MANUAL_TEST_CHECKLIST.md` is for. A green
-gametest is not a substitute for the manual session; it is the part of it that a
-machine can repeat.
+refuses a connection. Those are what [MANUAL_TEST_CHECKLIST.md](../MANUAL_TEST_CHECKLIST.md)
+is for. A green gametest is not a substitute for the manual session; it is the
+part of it that a machine can repeat.
+
+## When something fails
+
+Reading a session back — where the log is, how to tell a module that is off from
+one that is broken, and how to check a mixin applied — is
+[DEBUGGING.md](DEBUGGING.md). Report what you found with `ISSUE_TEMPLATE.md`.

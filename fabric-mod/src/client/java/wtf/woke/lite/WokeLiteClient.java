@@ -59,6 +59,12 @@ public final class WokeLiteClient implements ClientModInitializer {
         Setting<Integer> textColor = config.addGlobalSetting(
                 Settings.color("hud.textColor", DEFAULT_TEXT_COLOR)
                         .describedBy("wokewtf.lite.setting.hud.textColor", null));
+        // Verbose logging for one module. Empty means "watch nothing", and a
+        // typo behaves the same way: the point is to narrow the log down, not to
+        // widen it by accident.
+        Setting<String> debugModule = config.addGlobalSetting(
+                Settings.text("debugModule", "", 32)
+                        .describedBy("wokewtf.lite.setting.debugModule", "wokewtf.lite.setting.debugModule.tooltip"));
 
         graph = WokeLiteModules.register(registry);
         // The config screen belongs to the mod rather than to one module, so its
@@ -73,6 +79,8 @@ public final class WokeLiteClient implements ClientModInitializer {
         registry.freeze();
 
         dispatcher = new ModuleDispatcher(registry);
+        dispatcher.debugWatch().watch(debugModule.get());
+        debugModule.onChanged(dispatcher.debugWatch()::watch);
         HudRenderer hudRenderer = new HudRenderer(registry, background, backgroundColor, textColor);
         ClientEvents.register(config, dispatcher, hudRenderer, graph.crosshair(), graph.waypoints(),
                 graph.inventorySort(), new ClientEvents.Convenience(keybinds, graph.autoReconnect(),

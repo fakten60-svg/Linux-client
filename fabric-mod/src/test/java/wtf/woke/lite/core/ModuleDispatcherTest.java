@@ -153,4 +153,29 @@ class ModuleDispatcherTest {
         }));
         assertTrue(module.hasFailed());
     }
+
+    @Test
+    void theDebugWatchWatchesOneModuleWithoutChangingWhatRuns() {
+        ModuleRegistry registry = new ModuleRegistry();
+        FakeModule watched = new FakeModule("hud.fps");
+        FakeModule other = new FakeModule("ui.chat");
+        registry.register(watched);
+        registry.register(other);
+        registry.setEnabled("hud.fps", true);
+        registry.setEnabled("ui.chat", true);
+
+        ModuleDispatcher dispatcher = new ModuleDispatcher(registry);
+        assertEquals("", dispatcher.debugWatch().target(), "nothing is watched until the config says so");
+
+        dispatcher.debugWatch().watch("hud.fps");
+        dispatcher.tickAll();
+        dispatcher.onJoinWorld();
+        dispatcher.onLeaveWorld();
+
+        assertTrue(dispatcher.debugWatch().watches("hud.fps"));
+        assertEquals(1, watched.tickCount(), "watching logs, it never gates the work");
+        assertEquals(1, other.tickCount(), "an unwatched module is unaffected");
+        assertEquals(1, watched.joinCount());
+        assertEquals(1, watched.leaveCount());
+    }
 }

@@ -169,6 +169,8 @@
   "wokewtf.lite.setting.hud.background": "HUD Background",
   "wokewtf.lite.setting.hud.backgroundColor": "Background Color",
   "wokewtf.lite.setting.hud.textColor": "Text Color",
+  "wokewtf.lite.setting.debugModule": "Debug Module",
+  "wokewtf.lite.setting.debugModule.tooltip": "A module id such as hud.fps whose activity is logged in detail, or empty for none. The lines go to debug.log. Edited in config/wokewtf-lite.json.",
 
   "wokewtf.lite.config.title": "woke.wtf Lite Settings",
   "wokewtf.lite.config.search": "Search modules",
