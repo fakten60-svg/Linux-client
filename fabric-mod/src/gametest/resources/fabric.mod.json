@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "wokewtf-lite-gametest",
+  "version": "1.0.0",
+  "name": "woke.wtf Lite client gametest",
+  "description": "Dev-only client gametest for woke.wtf Lite. Never packaged and never shipped.",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "wtf.woke.lite.gametest.WokeLiteClientGameTest"
+    ]
+  }
+}

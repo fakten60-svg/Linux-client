@@ -97,12 +97,13 @@ look broken.
 ## Configuration
 
 In game, press **Right Shift** (rebindable in Controls) or run `/wokewtf config`.
-The settings screen lists every module by category, searches them by name and
-description, and edits every value where it is shown: a switch for an on/off
-setting, a slider for a number, a list for a choice, a cycled swatch for a
-colour, and a **Reset** button on every row that puts one setting back to its
-default. Hovering a setting explains it. Changes take effect immediately and are
-written out within a few seconds.
+On the first world join of a session the mod says so once in chat. The settings
+screen lists every module by category, searches them by name and description,
+and edits every value where it is shown: a switch for an on/off setting, a
+slider for a number, a list for a choice, a cycled swatch for a colour, and a
+**Reset** button on every row that puts one setting back to its default. Hovering
+a setting explains it. Changes take effect immediately and are written out within
+a few seconds.
 
 Underneath, the settings are a plain JSON file, `config/wokewtf-lite.json` in
 your game directory: written atomically (a `.bak` of the previous version is
@@ -141,19 +142,19 @@ Install it (`17.0.1` is the Minecraft 1.21.11 build) and this mod's entry in the
 mod list gains a **Configure** button that opens the settings screen above.
 Nothing else about the mod changes.
 
-The dependency is soft in both directions. It is listed under `suggests` in
-`fabric.mod.json` rather than `depends`, and the integration class is compiled
-against Mod Menu but never bundled — so without Mod Menu the mod loads exactly as
-before and only that button is missing. Nothing here can fail to load because of
-it.
+The dependency is soft in both directions: `suggests`, not `depends`, in
+`fabric.mod.json`, and an integration class that is compiled against Mod Menu but
+never bundled. Without Mod Menu the mod loads exactly as before and only that
+button is missing.
 
 ## Development
 
 ```bash
 cd fabric-mod
-./gradlew build       # compile, run every test, and build the jar
-./gradlew test        # the unit suite only
-./gradlew runClient   # launch a development client with the mod loaded
+./gradlew build              # compile, run every test, and build the jar
+./gradlew test               # the unit suite only
+./gradlew runClient          # launch a development client with the mod loaded
+./gradlew runClientGameTest  # the automated client gametest, see docs/TESTING.md
 ```
 
 The jar lands in `build/libs/`. The unit suite is dependency-free and headless:
@@ -165,7 +166,9 @@ feature. The rules the code is held to are mechanical: no source file reaches
 carrying pure logic has tests.
 
 `MANUAL_TEST_CHECKLIST.md` in this directory lists the paths that need a running
-game and a pair of hands — the ones the automated suite cannot reach.
+game and a pair of hands — the ones the automated suite cannot reach. What the
+two automated layers cover, and how to run the gametest on a headless machine, is
+in [docs/TESTING.md](docs/TESTING.md).
 
 ## Debugging
 
@@ -187,11 +190,9 @@ keeps the same two files under `.minecraft/logs/`).
   until you open a book or take a screenshot.
 - **Per-module verbose logging?** None yet. Failures stay visible: the
   dispatcher logs `Module '<id>' threw during <phase>; disabling it` at ERROR.
-  A per-module toggle is worth building only if the manual session keeps turning
-  up module behaviour the log cannot explain.
+  A per-module toggle is worth building only if the log cannot explain a module.
 
-Report a failed test with the template in `ISSUE_TEMPLATE.md`, using the ids in
-`MANUAL_TEST_CHECKLIST.md`.
+Failed test? Use `ISSUE_TEMPLATE.md` with an id from the checklist.
 
 ## License
 
