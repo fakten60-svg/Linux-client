@@ -21,8 +21,11 @@ import java.util.List;
  */
 public final class LanguageFile {
 
-    /** Classpath location of the language file. */
+    /** Classpath location of the English language file, the mod's default. */
     public static final String RESOURCE = "/assets/wokewtf-lite/lang/en_us.json";
+
+    /** Classpath location of the German translation, the one non-default locale shipped. */
+    public static final String GERMAN_RESOURCE = "/assets/wokewtf-lite/lang/de_de.json";
 
     /**
      * Prefix the game itself forces on a keybind category's label.
@@ -40,14 +43,22 @@ public final class LanguageFile {
         throw new AssertionError("No instances of " + LanguageFile.class.getName());
     }
 
-    /** @return the parsed language file */
+    /** @return the parsed English language file */
     public static JsonObject load() {
-        InputStream stream = LanguageFile.class.getResourceAsStream(RESOURCE);
-        assertNotNull(stream, RESOURCE + " must be on the classpath");
+        return load(RESOURCE);
+    }
+
+    /**
+     * @param resource classpath location of a language file
+     * @return the parsed file
+     */
+    public static JsonObject load(String resource) {
+        InputStream stream = LanguageFile.class.getResourceAsStream(resource);
+        assertNotNull(stream, resource + " must be on the classpath");
         try (Reader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
             return JsonParser.parseReader(reader).getAsJsonObject();
         } catch (Exception cause) {
-            throw new AssertionError(RESOURCE + " must be valid JSON", cause);
+            throw new AssertionError(resource + " must be valid JSON", cause);
         }
     }
 

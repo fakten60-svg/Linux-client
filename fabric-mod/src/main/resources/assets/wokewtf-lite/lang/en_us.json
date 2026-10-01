@@ -178,6 +178,7 @@
   "wokewtf.lite.config.reset.tooltip": "Restore this setting's default value.",
   "wokewtf.lite.config.global.description": "Settings that apply to the mod as a whole.",
   "wokewtf.lite.keybind.open_config": "Open Settings",
+  "wokewtf.lite.first_join.chat_guide": "woke.wtf Lite loaded. Press R-Shift or use /wokewtf config to open settings.",
 
   "wokewtf.lite.anchor.top_left": "Top Left",
   "wokewtf.lite.anchor.top_center": "Top Center",

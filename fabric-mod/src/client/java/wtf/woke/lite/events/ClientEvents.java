@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import wtf.woke.lite.WokeLite;
 import wtf.woke.lite.command.WokeLiteCommands;
@@ -22,6 +23,7 @@ import wtf.woke.lite.modules.util.AutoReconnectModule;
 import wtf.woke.lite.modules.util.ChatMacrosModule;
 import wtf.woke.lite.modules.util.RespawnConfirmModule;
 import wtf.woke.lite.modules.util.StatsModule;
+import wtf.woke.lite.session.JoinWelcome;
 
 /**
  * Every Fabric callback this mod subscribes to, in one auditable place.
@@ -40,6 +42,18 @@ public final class ClientEvents {
 
     /** Identifier of the single HUD layer this mod draws into. */
     private static final Identifier HUD_LAYER = Identifier.of(WokeLite.MOD_ID, "overlay");
+
+    /**
+     * Chat line shown once per client run, after the first world join.
+     *
+     * <p>It names both ways into the settings screen, because a player who has
+     * not found the keybind yet has also not found the command, and the screen
+     * appearing is the only thing that would tell them either exists.</p>
+     *
+     * <p>Its English text lives in {@code en_us.json} — the default every other
+     * language falls back to per key — and the German one in {@code de_de.json}.</p>
+     */
+    static final String CHAT_GUIDE_KEY = "wokewtf.lite.first_join.chat_guide";
 
     /**
      * The convenience-module wiring.
@@ -96,18 +110,26 @@ public final class ClientEvents {
         // the earliest moment they do.
         KeybindConflictReport conflictReport = new KeybindConflictReport();
 
+        // The join guide is armed by the join and printed by the tick after it,
+        // once per client run; see JoinWelcome for why it is not a bare flag.
+        JoinWelcome welcome = new JoinWelcome();
+
         // Client ticks are the heartbeat: modules get their tick, then the
         // mod's own bindings are polled, then the debounced autosave flushes.
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             dispatcher.tickAll();
             convenience.keybinds().poll();
             conflictReport.reportOnce(convenience.keybinds());
+            if (welcome.consume()) {
+                client.inGameHud.getChatHud().addMessage(Text.translatable(CHAT_GUIDE_KEY));
+            }
             config.tick();
         });
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             dispatcher.onJoinWorld();
             convenience.autoReconnect().onJoined(client);
+            welcome.arm();
             // Bindings can be changed between sessions, so the check is repeated
             // every time a world is entered rather than only at startup.
             conflictReport.report(convenience.keybinds());
