@@ -10,19 +10,20 @@ import java.util.Objects;
  * the definitions can be registered, listed and tested without a game
  * instance.</p>
  *
+ * <p>There is no category field on purpose: the game files every binding under
+ * one {@code KeyBinding.Category}, which {@code KeybindBridge} owns, and a
+ * per-binding category key here could not be honoured anyway — the game builds
+ * its label from the category's {@code Identifier}, not from a translation key.</p>
+ *
  * @param id             stable id, unique across the mod
  * @param translationKey label shown in the vanilla Controls screen
- * @param categoryKey    keybind category shown in that screen
  * @param defaultKey     GLFW key name, e.g. {@code key.keyboard.g}
  * @param handler        action to run when the key is pressed
  */
-public record KeybindAction(String id, String translationKey, String categoryKey, String defaultKey, Runnable handler) {
+public record KeybindAction(String id, String translationKey, String defaultKey, Runnable handler) {
 
     /** GLFW name used when a keybind ships unbound. */
     public static final String UNBOUND = "key.keyboard.unknown";
-
-    /** Default category key for this mod's keybinds. */
-    public static final String DEFAULT_CATEGORY_KEY = "wokewtf.lite.keybind.category";
 
     public KeybindAction {
         Objects.requireNonNull(id, "id");
@@ -32,7 +33,6 @@ public record KeybindAction(String id, String translationKey, String categoryKey
         translationKey = translationKey == null || translationKey.isBlank()
                 ? "wokewtf.lite.keybind." + id
                 : translationKey;
-        categoryKey = categoryKey == null || categoryKey.isBlank() ? DEFAULT_CATEGORY_KEY : categoryKey;
         defaultKey = defaultKey == null || defaultKey.isBlank() ? UNBOUND : defaultKey;
         handler = handler == null ? () -> { } : handler;
     }

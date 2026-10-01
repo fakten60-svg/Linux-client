@@ -43,7 +43,7 @@ public final class FullscreenKeyModule extends QoLModule {
 
     @Override
     public void onRegister(ModuleRegistry registry) {
-        registry.keybinds().register(new KeybindAction(MODULE_ID, TRANSLATION_KEY + ".keybind", null,
+        registry.keybinds().register(new KeybindAction(MODULE_ID, TRANSLATION_KEY + ".keybind",
                 KeybindAction.UNBOUND, this::toggle));
     }
 

@@ -82,7 +82,7 @@ public final class AutoReconnectModule extends QoLModule {
     public void onRegister(ModuleRegistry registry) {
         addSetting(countdownSeconds);
         registry.keybinds().register(new KeybindAction(CANCEL_KEYBIND_ID, TRANSLATION_KEY + ".keybind.cancel",
-                null, KeybindAction.UNBOUND, this::cancelFromKeybind));
+                KeybindAction.UNBOUND, this::cancelFromKeybind));
     }
 
     /** Remembers the server to come back to while the connection is still live. */

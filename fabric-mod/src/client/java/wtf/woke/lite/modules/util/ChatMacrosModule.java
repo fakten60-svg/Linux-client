@@ -68,7 +68,7 @@ public final class ChatMacrosModule extends QoLModule {
         addSetting(macros);
         for (int slot = 1; slot <= SLOTS; slot++) {
             int bound = slot;
-            registry.keybinds().register(new KeybindAction(slotKeybindId(slot), slotLabelKey(slot), null,
+            registry.keybinds().register(new KeybindAction(slotKeybindId(slot), slotLabelKey(slot),
                     KeybindAction.UNBOUND, () -> type(bound)));
         }
     }

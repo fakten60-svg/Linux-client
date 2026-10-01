@@ -90,7 +90,7 @@ public final class WokeConfigScreen extends Screen {
 
     /** @return the keybind that opens this screen, for the module registry */
     public static KeybindAction keybind() {
-        return new KeybindAction(OPEN_KEYBIND_ID, OPEN_KEYBIND_KEY, KeybindAction.DEFAULT_CATEGORY_KEY,
+        return new KeybindAction(OPEN_KEYBIND_ID, OPEN_KEYBIND_KEY,
                 OPEN_KEYBIND_DEFAULT, () -> open(MinecraftClient.getInstance().currentScreen));
     }
 

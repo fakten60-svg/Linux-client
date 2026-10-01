@@ -41,15 +41,11 @@ Thirteen modules in three groups.
 
 ### HUD
 
-![](docs/hud.png)
-
 | Module | Default | What it does |
 | --- | --- | --- |
 | `hud.fps` — FPS Counter | **on** | Shows the current client frame rate. Read-only; it reports what the game already measures. |
 
 ### Interface
-
-![](docs/interface.png)
 
 | Module | Default | What it does |
 | --- | --- | --- |
@@ -61,8 +57,6 @@ Thirteen modules in three groups.
 | `ui.inventory_sort` — Inventory Sort | off | Reorders your own inventory, as a permutation of the stacks you already carry. **Singleplayer or LAN host only.** |
 
 ### Convenience
-
-![](docs/convenience.png)
 
 | Module | Default | What it does |
 | --- | --- | --- |
@@ -111,6 +105,10 @@ kept), and unknown keys from a newer build are preserved rather than dropped.
 The schema version is `1`; the modules added since are purely additive. Editing
 it by hand still works, and is still the quickest way to set an exact colour.
 
+Text follows your game language: **Options → Language → Deutsch** switches every
+label and chat line to German and back. English is the default, and a language
+without a translation falls back to it key by key.
+
 Some things are easier from the chat box. These are **client** commands: they
 are parsed and answered by your own client and are never sent to a server.
 
@@ -130,7 +128,7 @@ are parsed and answered by your own client and are never sent to a server.
 Client commands only exist once you have joined a world, which is when Fabric
 builds the client command dispatcher.
 
-## Scope
+## What this does NOT do
 
 What the mod deliberately does **not** do is the point of the project, not a
 disclaimer bolted on: the full list lives in [docs/SCOPE.md](docs/SCOPE.md).
@@ -172,25 +170,17 @@ in [docs/TESTING.md](docs/TESTING.md).
 
 ## Debugging
 
-A failed manual test is diagnosed from the log: `run/logs/latest.log` for the
-current session and `run/logs/debug.log` for everything else (a normal install
-keeps the same two files under `.minecraft/logs/`).
+`run/logs/latest.log` is the current session and `run/logs/debug.log` everything
+else (a normal install keeps the same two under `.minecraft/logs/`). Every line
+this mod writes is tagged with its logger name — `(wtf Lite)` in `latest.log`,
+`(woke.wtf Lite)` in `debug.log`. Anything else is the game or Fabric, and a
+log has plenty of it.
 
-- **This mod's lines** all carry the tag `(wtf Lite)`, e.g.
-  `[Render thread/INFO] (wtf Lite) ...`. Anything else is the game or Fabric.
-- **Loaded, and how many modules?** Startup prints one line:
-  `woke.wtf Lite v0.1.0 ready: 13 modules (N enabled), 24 keybinds, config ...`,
-  then `Registered modules: hud.fps, ui.crosshair, ...`.
-- **Is a module active?** There is no per-module line yet; `(N enabled)` and the
-  config file are the current answer. A line per module would be a small add-on.
-- **Did a mixin apply?** Mixin logs at DEBUG only: search `debug.log` for
-  `wokewtf-lite.client.mixins.json` to find `Mixing <Name> from
-  wokewtf-lite.client.mixins.json into ...`. A mixin appears when its target
-  first loads, so `BookEditScreenMixin` and `ScreenshotShareMixin` may be absent
-  until you open a book or take a screenshot.
-- **Per-module verbose logging?** None yet. Failures stay visible: the
-  dispatcher logs `Module '<id>' threw during <phase>; disabling it` at ERROR.
-  A per-module toggle is worth building only if the log cannot explain a module.
+A module that looks dead is told from one that is merely switched off with the
+global **Debug Module** setting, and a whole session can be summarised with
+`bash scripts/parse_session_log.sh`. Where the log is, how to read it, how to
+check a mixin applied and what a latched-off module looks like are all in
+[docs/DEBUGGING.md](docs/DEBUGGING.md).
 
 Failed test? Use `ISSUE_TEMPLATE.md` with an id from the checklist.
 
