@@ -8,29 +8,30 @@ left, and its job is to be the honest counterpart to a green build.
 
 - [ ] Java 21, Fabric Loader 0.19.5+, Fabric API `0.141.6+1.21.11`.
 - [ ] `./gradlew clean build` is green.
-- [ ] Start the client with `scripts/test_session.sh`. It resets
-      `run/config/wokewtf-lite.json` so **every module is off**, which is the
-      baseline each test below assumes.
-- [ ] In `run/logs/latest.log`, confirm
-      `woke.wtf Lite v0.1.0 ready: 13 modules (0 enabled), 24 keybinds` and the
-      list `Registered modules: hud.fps, … util.stats`.
+- [ ] Optionally, `./gradlew runClientGameTest` is green (see `docs/TESTING.md`).
+- [ ] Start the client with `scripts/test_session.sh`: it resets
+      `run/config/wokewtf-lite.json` so **every module is off** — the baseline
+      assumed below.
+- [ ] In `run/logs/latest.log`, confirm `woke.wtf Lite v0.1.0 ready: 13 modules
+      (0 enabled), 24 keybinds` and `Registered modules: hud.fps, … util.stats`.
 - [ ] **Options → Controls** shows a `woke.wtf Lite` category with 24 bindings.
 - [ ] Client commands (`/wokewtf …`) exist only after you join a world.
+
+### T-00 — Build and startup (prerequisite)
+
+- **Do:** build the mod, start via `scripts/test_session.sh`, read the log, then
+  join a world, read the chat, and leave and rejoin.
+- **Expect:** the build is green; startup logs 13 modules and 24 keybinds with no
+  WARN or ERROR from `(wtf Lite)` and no `Keybind conflict` line while no mod key
+  is bound; the chat shows the welcome line once on the first join, not again.
+- **Fail:** any `(wtf Lite)` WARN or ERROR, fewer modules or keybinds, a missing
+  or repeated welcome line, or a crash.
 
 ## How to read an entry
 
 Each entry has a unique **test ID**, e.g. `T-07`. Work top to bottom, tick what
-passes, and report what does not as "T-07 failed" using the template in
-`ISSUE_TEMPLATE.md`. **Do** is what you perform, **Expect** is a pass, and
-**Fail** is anything in between — including "nothing happened".
-
-## T-00 — Build and startup (prerequisite)
-
-- **Do:** build the mod, then start via `scripts/test_session.sh` and read the log.
-- **Expect:** the build is green; startup logs 13 modules and 24 keybinds with no
-  WARN or ERROR from `(wtf Lite)`, and no `Keybind conflict` line while no mod key
-  is bound.
-- **Fail:** any `(wtf Lite)` WARN or ERROR, fewer modules or keybinds, or a crash.
+passes, and report what does not as "T-07 failed" with `ISSUE_TEMPLATE.md`.
+**Do** is what you perform, **Expect** is a pass, **Fail** is anything else.
 
 ## Settings screen
 
@@ -195,5 +196,4 @@ passes, and report what does not as "T-07 failed" using the template in
 ## After the session
 
 - [ ] The log has no exception from `wtf.woke.lite` after all of the above.
-- [ ] Your own settings are in `run/config/wokewtf-lite.json.test-session-backup`
-      if you want them back.
+- [ ] Your own settings are backed up in `…json.test-session-backup`.

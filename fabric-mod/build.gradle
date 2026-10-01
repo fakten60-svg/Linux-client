@@ -32,6 +32,20 @@ loom {
     }
 }
 
+// A dev-only client gametest source set. It is not part of the shipped jar and
+// carries no runtime dependency the mod itself would need; see docs/TESTING.md
+// and src/gametest for what it checks.
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = 'wokewtf-lite-gametest'
+        // Only the client gametest is used. Server gametests would run during
+        // `build`, which is not wanted here.
+        enableGameTests = false
+        enableClientGameTests = true
+    }
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
@@ -72,6 +86,20 @@ java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
     withSourcesJar()
+}
+
+// The client gametest is run headless. Fabric's own notes say the network
+// synchroniser it installs can deadlock the world load on CI machines; the
+// supported workaround is to switch it off for that run only.
+tasks.matching { it.name == 'runClientGameTest' }.configureEach {
+    jvmArgs '-Dfabric.client.gametest.disableNetworkSynchronizer=true'
+}
+
+// The gametest source set is dev-only and never enters the jar, but it still has
+// to compile: without this, a rename that broke it would go unnoticed until
+// somebody ran the test, which is the one moment it must work.
+tasks.matching { it.name == 'check' }.configureEach {
+    dependsOn 'compileGametestJava'
 }
 
 tasks.withType(AbstractArchiveTask).configureEach {

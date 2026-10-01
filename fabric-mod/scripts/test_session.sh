@@ -7,8 +7,9 @@
 # No xvfb: this is meant to run on a real desktop with a real screen.
 #
 # Usage:
-#   scripts/test_session.sh            # reset config, then ./gradlew runClient
-#   scripts/test_session.sh --tail     # the same, plus a live tail of the log
+#   scripts/test_session.sh              # reset config, then ./gradlew runClient
+#   scripts/test_session.sh --tail       # the same, plus a live tail of the log
+#   scripts/test_session.sh --reset-only # only write the all-off config, no client
 #
 set -euo pipefail
 
@@ -74,14 +75,21 @@ tail_log() {
 }
 
 TAIL_PID=""
+RESET_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --tail|-t) tail_log ;;
+    --reset-only|-r) RESET_ONLY=1 ;;
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
 
 rewrite_config
+
+if [ "$RESET_ONLY" -eq 1 ]; then
+  echo "Reset only: the client was not started."
+  exit 0
+fi
 
 echo "Starting ./gradlew runClient ..."
 ./gradlew runClient
